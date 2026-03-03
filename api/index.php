@@ -11,6 +11,22 @@ require_once __DIR__ . '/src/helpers.php';
 
 use UC\Database;
 
+set_exception_handler(function (Throwable $e): void {
+    error_log('[UC] Uncaught: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
+    if (!headers_sent()) {
+        json_response(['detail' => 'Erro interno.'], 500);
+        return;
+    }
+});
+
+set_error_handler(function (int $severity, string $message, string $file, int $line): bool {
+    // Converte warnings/notices em exceção para não “vazar” HTML.
+    if (!(error_reporting() & $severity)) {
+        return false;
+    }
+    throw new ErrorException($message, 0, $severity, $file, $line);
+});
+
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
@@ -56,14 +72,30 @@ if ($relativePath === '/upload-foto' && $method === 'POST') {
         exit;
     }
 
-    $finfo = new finfo(FILEINFO_MIME_TYPE);
-    $mime = $finfo->file($file['tmp_name']);
+    $mime = null;
+    if (class_exists('finfo')) {
+        $finfo = new finfo(FILEINFO_MIME_TYPE);
+        $mime = $finfo->file($file['tmp_name']);
+    } elseif (function_exists('mime_content_type')) {
+        $mime = mime_content_type($file['tmp_name']);
+    }
+    if (!is_string($mime) || $mime === '') {
+        $mime = 'application/octet-stream';
+    }
+
     $allowed = [
         'image/jpeg' => '.jpg',
         'image/png' => '.png',
         'image/webp' => '.webp',
     ];
-    if (!isset($allowed[$mime])) {
+    $ext = $allowed[$mime] ?? null;
+    if ($ext === null) {
+        $name = (string)($file['name'] ?? '');
+        $byName = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+        $map = ['jpg' => '.jpg', 'jpeg' => '.jpg', 'png' => '.png', 'webp' => '.webp'];
+        $ext = $map[$byName] ?? null;
+    }
+    if ($ext === null) {
         json_response(['detail' => 'Formato de imagem não suportado. Use JPG, PNG ou WEBP.'], 415);
         exit;
     }
@@ -73,7 +105,7 @@ if ($relativePath === '/upload-foto' && $method === 'POST') {
         mkdir($destDir, 0755, true);
     }
 
-    $filename = uuid_v4() . $allowed[$mime];
+    $filename = uuid_v4() . $ext;
     $destPath = $destDir . '/' . $filename;
 
     if (!move_uploaded_file($file['tmp_name'], $destPath)) {
