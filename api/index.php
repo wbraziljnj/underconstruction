@@ -657,6 +657,92 @@ if ($relativePath === '/fases' && $method === 'POST') {
     exit;
 }
 
+if (preg_match('#^/fases/(\\d+)$#', $relativePath, $m) && $method === 'PUT') {
+    require_authenticated_user_id();
+    $code = require_active_obra_codigo();
+    $faseId = (int)$m[1];
+
+    $existing = fetch_one('SELECT * FROM uc_fases WHERE fase_id = ? AND code = ? LIMIT 1', [$faseId, $code]);
+    if (!$existing) {
+        json_response(['detail' => 'Fase não encontrada.'], 404);
+        exit;
+    }
+
+    $payload = parse_json_body();
+
+    $fase = trim((string)($payload['fase'] ?? ''));
+    if ($fase === '') {
+        fail_validation('fase', 'Fase obrigatória');
+    }
+    $status = (string)($payload['status'] ?? '');
+    $allowedStatus = ['ABERTO', 'ANDAMENTO', 'PENDENTE', 'FINALIZADO'];
+    if (!in_array($status, $allowedStatus, true)) {
+        fail_validation('status', 'Status inválido');
+    }
+
+    $dataInicio = parse_datetime_or_null($payload['data_inicio'] ?? '', 'data_inicio', true);
+    $previsaoFinalizacao = parse_datetime_or_null($payload['previsao_finalizacao'] ?? '', 'previsao_finalizacao', true);
+    $dataFinalizacao = parse_datetime_or_null($payload['data_finalizacao'] ?? '', 'data_finalizacao', false);
+
+    $responsavelIdRaw = optional_string($payload['responsavel_id'] ?? null);
+    $responsavelId = null;
+    if ($responsavelIdRaw !== null && ctype_digit($responsavelIdRaw)) {
+        $responsavelId = (int)$responsavelIdRaw;
+    }
+
+    $valorTotal = normalize_decimal($payload['valor_total'] ?? null, 'valor_total', 2, true);
+    $valorParcial = normalize_decimal($payload['valor_parcial'] ?? null, 'valor_parcial', 2, true);
+    if ((float)$valorParcial > (float)$valorTotal) {
+        fail_validation('valor_parcial', 'Valor parcial não pode ser maior que o valor total');
+    }
+    $notas = optional_string($payload['notas'] ?? null);
+
+    $pdo = Database::connection();
+    $stmt = $pdo->prepare('UPDATE uc_fases SET fase = ?, status = ?, data_inicio = ?, previsao_finalizacao = ?, data_finalizacao = ?, responsavel_id = ?, valor_total = ?, valor_parcial = ?, notas = ? WHERE fase_id = ? AND code = ?');
+    $stmt->execute([
+        $fase,
+        $status,
+        $dataInicio,
+        $previsaoFinalizacao,
+        $dataFinalizacao,
+        $responsavelId,
+        $valorTotal,
+        $valorParcial,
+        $notas,
+        $faseId,
+        $code,
+    ]);
+
+    // Observação: no schema atual, as faturas referenciam a fase por `fase_id` (FK),
+    // então o "nome da fase" aparece automaticamente atualizado via JOIN — não existe coluna de nome na uc_faturas.
+
+    $row = fetch_one(
+        'SELECT f.fase_id, f.fase, f.status, f.data_inicio, f.previsao_finalizacao, f.data_finalizacao, f.responsavel_id,
+                f.valor_total, f.valor_parcial, f.notas, f.created_at, f.updated_at,
+                u.nome AS responsavel_nome
+         FROM uc_fases f
+         LEFT JOIN uc_users u ON u.user_id = f.responsavel_id
+         WHERE f.fase_id = ? AND f.code = ? LIMIT 1',
+        [$faseId, $code]
+    );
+    json_response([
+        'faseId' => (int)$row['fase_id'],
+        'fase' => (string)$row['fase'],
+        'status' => (string)$row['status'],
+        'dataInicio' => (string)$row['data_inicio'],
+        'previsaoFinalizacao' => (string)$row['previsao_finalizacao'],
+        'dataFinalizacao' => $row['data_finalizacao'] !== null ? (string)$row['data_finalizacao'] : null,
+        'responsavelId' => $row['responsavel_id'] !== null ? (int)$row['responsavel_id'] : null,
+        'responsavelNome' => $row['responsavel_nome'] !== null ? (string)$row['responsavel_nome'] : null,
+        'valorTotal' => (string)$row['valor_total'],
+        'valorParcial' => (string)$row['valor_parcial'],
+        'notas' => $row['notas'] !== null ? (string)$row['notas'] : null,
+        'createdAt' => (string)$row['created_at'],
+        'updatedAt' => (string)$row['updated_at'],
+    ]);
+    exit;
+}
+
 if ($relativePath === '/faturas' && $method === 'POST') {
     require_authenticated_user_id();
     $code = require_active_obra_codigo();

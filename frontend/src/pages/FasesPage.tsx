@@ -4,7 +4,6 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { apiFetch } from '../api/client';
-import { apiFetch } from '../api/client';
 
 const schema = z
   .object({
@@ -27,6 +26,36 @@ type FormValues = z.infer<typeof schema>;
 
 type UserOption = { userId: string; nome: string; tipoUsuario: string; status: string };
 
+function toDatetimeLocal(value?: string | null) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(
+    d.getMinutes()
+  )}`;
+}
+
+function PencilIcon({ title = 'Editar' }: { title?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      role="img"
+      aria-label={title}
+    >
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+    </svg>
+  );
+}
+
 function toLocalDatetimeInputValue(value?: string) {
   if (!value) return '';
   // aceita YYYY-MM-DDTHH:mm (input) ou datas completas; mantém simples
@@ -35,6 +64,8 @@ function toLocalDatetimeInputValue(value?: string) {
 
 export default function FasesPage() {
   const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<'create' | 'edit'>('create');
+  const [editingRow, setEditingRow] = useState<any | null>(null);
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
@@ -112,6 +143,8 @@ export default function FasesPage() {
         <button
           className="btn primary"
           onClick={() => {
+            setMode('create');
+            setEditingRow(null);
             form.reset(defaults);
             setOpen(true);
           }}
@@ -149,7 +182,7 @@ export default function FasesPage() {
               <th style={{ padding: 10 }}>Finalização</th>
               <th style={{ padding: 10 }}>Responsável</th>
               <th style={{ padding: 10 }}>Valor total</th>
-              <th style={{ padding: 10 }} />
+              <th style={{ padding: 10 }}>Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -180,7 +213,32 @@ export default function FasesPage() {
                   <td style={{ padding: 10 }}>{r.dataFinalizacao || '-'}</td>
                   <td style={{ padding: 10 }}>{r.responsavelNome || '-'}</td>
                   <td style={{ padding: 10 }}>{r.valorTotal}</td>
-                  <td style={{ padding: 10 }} />
+                  <td style={{ padding: 10 }}>
+                    <button
+                      className="btn"
+                      type="button"
+                      title="Editar"
+                      onClick={() => {
+                        setMode('edit');
+                        setEditingRow(r);
+                        form.reset({
+                          fase: r.fase || '',
+                          status: r.status || 'ABERTO',
+                          data_inicio: toDatetimeLocal(r.dataInicio),
+                          previsao_finalizacao: toDatetimeLocal(r.previsaoFinalizacao),
+                          data_finalizacao: toDatetimeLocal(r.dataFinalizacao),
+                          responsavel_id: r.responsavelId ? String(r.responsavelId) : '',
+                          valor_total: Number(r.valorTotal || 0),
+                          valor_parcial: Number(r.valorParcial || 0),
+                          notas: r.notas || ''
+                        });
+                        setOpen(true);
+                      }}
+                      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                    >
+                      <PencilIcon />
+                    </button>
+                  </td>
                 </tr>
               ))
             )}
@@ -190,7 +248,7 @@ export default function FasesPage() {
 
       <Modal
         open={open}
-        title="Nova fase"
+        title={mode === 'edit' ? 'Editar fase' : 'Nova fase'}
         onClose={() => setOpen(false)}
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
@@ -203,10 +261,12 @@ export default function FasesPage() {
               onClick={form.handleSubmit(async (values) => {
                 try {
                   setSaving(true);
-                  await apiFetch('/fases', {
-                    method: 'POST',
-                    json: values
-                  });
+                  if (mode === 'edit' && editingRow?.faseId) {
+                    await apiFetch(`/fases/${editingRow.faseId}`, { method: 'PUT', json: values });
+                  } else {
+                    await apiFetch('/fases', { method: 'POST', json: values });
+                  }
+                  await load();
                   setOpen(false);
                 } catch (e) {
                   alert(e instanceof Error ? e.message : 'Falha ao salvar fase');
@@ -321,10 +381,10 @@ export default function FasesPage() {
 
           <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 12, opacity: 0.75, fontSize: 12 }}>
             <div>
-              <b>created_at:</b> —
+              <b>created_at:</b> {mode === 'edit' ? (editingRow?.createdAt || '—') : '—'}
             </div>
             <div>
-              <b>updated_at:</b> —
+              <b>updated_at:</b> {mode === 'edit' ? (editingRow?.updatedAt || '—') : '—'}
             </div>
           </div>
         </form>
