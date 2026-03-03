@@ -20,16 +20,16 @@ const schema = z.object({
   telefone: z.string().min(1, 'Telefone obrigatório'),
   endereco: z.string().min(1, 'Endereço obrigatório'),
   email: z.string().email('Email inválido'),
-  password_hash: z.string().min(1, 'Password hash obrigatório'),
   notas: z.string().optional(),
   status: z.enum(['ATIVO', 'INATIVO']),
-  code: z.string().min(1, 'Code (obra) obrigatório')
+  reset_senha: z.boolean().optional()
 });
 
 type FormValues = z.infer<typeof schema>;
 
 export default function CadastrosPage() {
   const [open, setOpen] = useState(false);
+  const [selectedPhotoFile, setSelectedPhotoFile] = useState<File | null>(null);
 
   const defaults = useMemo<FormValues>(
     () => ({
@@ -40,10 +40,9 @@ export default function CadastrosPage() {
       telefone: '',
       endereco: '',
       email: '',
-      password_hash: '',
       notas: '',
       status: 'ATIVO',
-      code: ''
+      reset_senha: false
     }),
     []
   );
@@ -64,6 +63,7 @@ export default function CadastrosPage() {
           className="btn primary"
           onClick={() => {
             form.reset(defaults);
+            setSelectedPhotoFile(null);
             setOpen(true);
           }}
         >
@@ -125,7 +125,11 @@ export default function CadastrosPage() {
               className="btn primary"
               onClick={form.handleSubmit(async (values) => {
                 // TODO: integrar POST /api/cadastros (uc_users)
-                console.log('novo_usuario', values);
+                // Se reset_senha = true (edição), backend deve setar senha padrão "UnderConstruction".
+                console.log('usuario_payload', {
+                  ...values,
+                  fotoFile: selectedPhotoFile ? { name: selectedPhotoFile.name, type: selectedPhotoFile.type } : null
+                });
                 setOpen(false);
               })}
               type="button"
@@ -139,10 +143,40 @@ export default function CadastrosPage() {
           onSubmit={(e) => e.preventDefault()}
           style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}
         >
-          <label>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>Foto (text)</div>
-            <input className="input" {...form.register('foto')} placeholder="uploads/..." />
-          </label>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 12, opacity: 0.8 }}>Foto (imagem)</div>
+                <div style={{ fontSize: 12, opacity: 0.7 }}>
+                  {selectedPhotoFile ? selectedPhotoFile.name : 'Nenhum arquivo selecionado'}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <label className="btn" style={{ cursor: 'pointer' }}>
+                  Selecionar
+                  <input
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] ?? null;
+                      setSelectedPhotoFile(file);
+                    }}
+                  />
+                </label>
+                <button
+                  className="btn"
+                  type="button"
+                  onClick={() => {
+                    setSelectedPhotoFile(null);
+                  }}
+                  disabled={!selectedPhotoFile}
+                >
+                  Remover
+                </button>
+              </div>
+            </div>
+          </div>
 
           <label>
             <div style={{ fontSize: 12, opacity: 0.8 }}>Tipo de usuário</div>
@@ -206,13 +240,13 @@ export default function CadastrosPage() {
           </label>
 
           <label style={{ gridColumn: '1 / -1' }}>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>Password hash (varchar(255))</div>
-            <input className="input" {...form.register('password_hash')} placeholder="$2y$10$..." />
-            {form.formState.errors.password_hash && (
-              <div style={{ color: 'var(--danger)', fontSize: 12 }}>
-                {form.formState.errors.password_hash.message}
+            <div style={{ fontSize: 12, opacity: 0.8 }}>Resetar Senha?</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
+              <input type="checkbox" {...form.register('reset_senha')} />
+              <div style={{ fontSize: 12, opacity: 0.75 }}>
+                Se SIM, ao salvar a edição o backend volta a senha para o padrão <b>UnderConstruction</b>.
               </div>
-            )}
+            </div>
           </label>
 
           <label style={{ gridColumn: '1 / -1' }}>
@@ -220,22 +254,14 @@ export default function CadastrosPage() {
             <textarea className="input" {...form.register('notas')} />
           </label>
 
-          <label style={{ gridColumn: '1 / -1' }}>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>Code (obra)</div>
-            <input className="input" {...form.register('code')} placeholder="Ex: minhacasa" />
-            {form.formState.errors.code && (
-              <div style={{ color: 'var(--danger)', fontSize: 12 }}>{form.formState.errors.code.message}</div>
-            )}
-          </label>
-
-          <label>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>created_at</div>
-            <input className="input" disabled value="(auto)" />
-          </label>
-          <label>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>updated_at</div>
-            <input className="input" disabled value="(auto)" />
-          </label>
+          <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 12, opacity: 0.75, fontSize: 12 }}>
+            <div>
+              <b>created_at:</b> (auto)
+            </div>
+            <div>
+              <b>updated_at:</b> (auto)
+            </div>
+          </div>
         </form>
       </Modal>
     </div>
