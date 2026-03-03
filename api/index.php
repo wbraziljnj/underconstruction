@@ -742,6 +742,123 @@ if ($relativePath === '/faturas' && $method === 'POST') {
     exit;
 }
 
+if (preg_match('#^/faturas/(\\d+)$#', $relativePath, $m) && $method === 'PUT') {
+    require_authenticated_user_id();
+    $code = require_active_obra_codigo();
+    $faturaId = (int)$m[1];
+
+    $existing = fetch_one('SELECT * FROM uc_faturas WHERE fatura_id = ? AND code = ? LIMIT 1', [$faturaId, $code]);
+    if (!$existing) {
+        json_response(['detail' => 'Fatura não encontrada.'], 404);
+        exit;
+    }
+
+    $payload = parse_json_body();
+
+    $descricao = trim((string)($payload['descricao'] ?? ''));
+    if ($descricao === '') {
+        fail_validation('descricao', 'Descrição obrigatória');
+    }
+
+    $data = parse_datetime_or_null($payload['data'] ?? '', 'data', true);
+
+    $pagamento = (string)($payload['pagamento'] ?? '');
+    $allowedPagamento = ['aberto', 'pendente', 'pago'];
+    if (!in_array($pagamento, $allowedPagamento, true)) {
+        fail_validation('pagamento', 'Pagamento inválido');
+    }
+
+    $status = (string)($payload['status'] ?? '');
+    if (!in_array($status, ['ATIVO', 'INATIVO'], true)) {
+        fail_validation('status', 'Status inválido');
+    }
+
+    $valor = normalize_decimal($payload['valor'] ?? null, 'valor', 2, true);
+    $quantidade = normalize_int($payload['quantidade'] ?? null, 'quantidade', true);
+    if ($quantidade < 0) {
+        fail_validation('quantidade', 'Quantidade deve ser positiva');
+    }
+    $total = normalize_decimal((float)$valor * (float)$quantidade, 'total', 2, true);
+
+    $faseIdRaw = trim((string)($payload['fase_id'] ?? ''));
+    if ($faseIdRaw === '' || !ctype_digit($faseIdRaw)) {
+        fail_validation('fase_id', 'Fase obrigatória');
+    }
+    $faseId = (int)$faseIdRaw;
+
+    $responsavelIdRaw = optional_string($payload['responsavel_id'] ?? null);
+    $responsavelId = null;
+    if ($responsavelIdRaw !== null && ctype_digit($responsavelIdRaw)) {
+        $responsavelId = (int)$responsavelIdRaw;
+    }
+    $empresaIdRaw = optional_string($payload['empresa_id'] ?? null);
+    $empresaId = null;
+    if ($empresaIdRaw !== null && ctype_digit($empresaIdRaw)) {
+        $empresaId = (int)$empresaIdRaw;
+    }
+
+    $dataPagamento = null;
+    if ($pagamento === 'pago') {
+        $dataPagamento = parse_datetime_or_null($payload['data_pagamento'] ?? '', 'data_pagamento', true);
+    } else {
+        $dataPagamento = null;
+    }
+
+    $pdo = Database::connection();
+    $stmt = $pdo->prepare('UPDATE uc_faturas SET descricao = ?, data = ?, data_pagamento = ?, status = ?, pagamento = ?, valor = ?, quantidade = ?, total = ?, fase_id = ?, responsavel_id = ?, empresa_id = ? WHERE fatura_id = ? AND code = ?');
+    $stmt->execute([
+        $descricao,
+        $data,
+        $dataPagamento,
+        $status,
+        $pagamento,
+        $valor,
+        $quantidade,
+        $total,
+        $faseId,
+        $responsavelId,
+        $empresaId,
+        $faturaId,
+        $code,
+    ]);
+
+    $row = fetch_one(
+        'SELECT ft.fatura_id, ft.data, ft.lancamento, ft.data_pagamento, ft.status, ft.pagamento,
+                ft.valor, ft.quantidade, ft.descricao, ft.total, ft.fase_id, ft.responsavel_id, ft.empresa_id,
+                ft.created_at, ft.updated_at,
+                f.fase AS fase_nome,
+                ur.nome AS responsavel_nome,
+                ue.nome AS empresa_nome
+         FROM uc_faturas ft
+         LEFT JOIN uc_fases f ON f.fase_id = ft.fase_id
+         LEFT JOIN uc_users ur ON ur.user_id = ft.responsavel_id
+         LEFT JOIN uc_users ue ON ue.user_id = ft.empresa_id
+         WHERE ft.fatura_id = ? AND ft.code = ? LIMIT 1',
+        [$faturaId, $code]
+    );
+    json_response([
+        'faturaId' => (int)$row['fatura_id'],
+        'fatura' => (string)$row['descricao'],
+        'data' => (string)$row['data'],
+        'lancamento' => (string)$row['lancamento'],
+        'dataPagamento' => $row['data_pagamento'] !== null ? (string)$row['data_pagamento'] : null,
+        'status' => (string)$row['status'],
+        'pagamento' => (string)$row['pagamento'],
+        'valor' => (string)$row['valor'],
+        'quantidade' => (int)$row['quantidade'],
+        'total' => (string)$row['total'],
+        'faseId' => (int)$row['fase_id'],
+        'faseNome' => $row['fase_nome'] !== null ? (string)$row['fase_nome'] : null,
+        'responsavelId' => $row['responsavel_id'] !== null ? (int)$row['responsavel_id'] : null,
+        'responsavelNome' => $row['responsavel_nome'] !== null ? (string)$row['responsavel_nome'] : null,
+        'empresaId' => $row['empresa_id'] !== null ? (int)$row['empresa_id'] : null,
+        'empresaNome' => $row['empresa_nome'] !== null ? (string)$row['empresa_nome'] : null,
+        'createdAt' => (string)$row['created_at'],
+        'updatedAt' => (string)$row['updated_at'],
+    ]);
+    exit;
+}
+
 if ($relativePath === '/health' && $method === 'GET') {
     json_response(['ok' => true, 'time' => date(DATE_ATOM)]);
     exit;

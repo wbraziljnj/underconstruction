@@ -44,6 +44,36 @@ function formatBrDate(value?: string) {
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
 }
 
+function toDatetimeLocal(value?: string | null) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(
+    d.getMinutes()
+  )}`;
+}
+
+function PencilIcon({ title = 'Editar' }: { title?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      role="img"
+      aria-label={title}
+    >
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+    </svg>
+  );
+}
+
 function nowLocalDatetime() {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -54,6 +84,8 @@ function nowLocalDatetime() {
 
 export default function FaturaPage() {
   const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<'create' | 'edit'>('create');
+  const [editingRow, setEditingRow] = useState<any | null>(null);
   const [saving, setSaving] = useState(false);
   const [users, setUsers] = useState<UserOption[]>([]);
   const [fases, setFases] = useState<FaseOption[]>([]);
@@ -144,6 +176,8 @@ export default function FaturaPage() {
         <button
           className="btn primary"
           onClick={() => {
+            setMode('create');
+            setEditingRow(null);
             form.reset(defaults);
             // recalcula total no front só para UX (backend vai recalcular depois)
             form.setValue('total', (Number(valor) || 0) * (Number(quantidade) || 0), { shouldValidate: true });
@@ -183,7 +217,8 @@ export default function FaturaPage() {
               <th style={{ padding: 10 }}>Valor</th>
               <th style={{ padding: 10 }}>Total</th>
               <th style={{ padding: 10 }}>Pagamento</th>
-              <th style={{ padding: 10 }} />
+              <th style={{ padding: 10 }}>Fase</th>
+              <th style={{ padding: 10 }}>Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -215,6 +250,35 @@ export default function FaturaPage() {
                   <td style={{ padding: 10 }}>{r.total}</td>
                   <td style={{ padding: 10 }}>{r.pagamento}</td>
                   <td style={{ padding: 10, opacity: 0.7, fontSize: 12 }}>{r.faseNome || '-'}</td>
+                  <td style={{ padding: 10 }}>
+                    <button
+                      className="btn"
+                      type="button"
+                      title="Editar"
+                      onClick={() => {
+                        setMode('edit');
+                        setEditingRow(r);
+                        form.reset({
+                          descricao: r.fatura || '',
+                          data: toDatetimeLocal(r.data),
+                          lancamento: toDatetimeLocal(r.lancamento) || nowLocalDatetime(),
+                          data_pagamento: toDatetimeLocal(r.dataPagamento),
+                          status: r.status || 'ATIVO',
+                          pagamento: r.pagamento || 'aberto',
+                          valor: Number(r.valor || 0),
+                          quantidade: Number(r.quantidade || 0),
+                          total: Number(r.total || 0),
+                          fase_id: String(r.faseId ?? ''),
+                          responsavel_id: r.responsavelId ? String(r.responsavelId) : '',
+                          empresa_id: r.empresaId ? String(r.empresaId) : ''
+                        });
+                        setOpen(true);
+                      }}
+                      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                    >
+                      <PencilIcon />
+                    </button>
+                  </td>
                 </tr>
               ))
             )}
@@ -224,7 +288,7 @@ export default function FaturaPage() {
 
       <Modal
         open={open}
-        title="Nova fatura"
+        title={mode === 'edit' ? 'Editar fatura' : 'Nova fatura'}
         onClose={() => setOpen(false)}
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
@@ -244,10 +308,12 @@ export default function FaturaPage() {
 
                 try {
                   setSaving(true);
-                  await apiFetch('/faturas', {
-                    method: 'POST',
-                    json: payload
-                  });
+                  if (mode === 'edit' && editingRow?.faturaId) {
+                    await apiFetch(`/faturas/${editingRow.faturaId}`, { method: 'PUT', json: payload });
+                  } else {
+                    await apiFetch('/faturas', { method: 'POST', json: payload });
+                  }
+                  await load();
                   setOpen(false);
                 } catch (e) {
                   alert(e instanceof Error ? e.message : 'Falha ao salvar fatura');
@@ -405,10 +471,10 @@ export default function FaturaPage() {
 
           <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 12, opacity: 0.75, fontSize: 12 }}>
             <div>
-              <b>created_at:</b> —
+              <b>created_at:</b> {mode === 'edit' ? (editingRow?.createdAt || '—') : '—'}
             </div>
             <div>
-              <b>updated_at:</b> —
+              <b>updated_at:</b> {mode === 'edit' ? (editingRow?.updatedAt || '—') : '—'}
             </div>
           </div>
         </form>
