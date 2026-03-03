@@ -30,7 +30,24 @@ echo "🧩 2) Copiando API PHP -> deploy/api/..."
 mkdir -p "$DEPLOY_DIR/api/src"
 mkdir -p "$DEPLOY_DIR/api/uploads"
 cp -f "$BASE_DIR/api/index.php" "$DEPLOY_DIR/api/"
-cp -f "$BASE_DIR/api/config.php" "$DEPLOY_DIR/api/"
+# No servidor atual, é mais simples subir o config já com credenciais (sem depender de env vars do Apache).
+cat > "$DEPLOY_DIR/api/config.php" <<'PHP'
+<?php
+
+return [
+    'db' => [
+        'hosts' => [
+            'mysql.wbrazilsoftwares.com.br',
+            'mysql50-farm1.kinghost.net',
+        ],
+        'database' => 'wbrazilsoftwar',
+        'user' => 'wbrazilsof_add1',
+        'password' => 'Heitor1',
+        'charset' => 'utf8mb4',
+    ],
+];
+PHP
+
 cp -f "$BASE_DIR/api/.htaccess" "$DEPLOY_DIR/api/"
 if compgen -G "$BASE_DIR/api/src/*.php" > /dev/null; then
   cp -f "$BASE_DIR/api/src/"*.php "$DEPLOY_DIR/api/src/"

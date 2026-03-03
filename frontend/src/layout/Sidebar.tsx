@@ -4,7 +4,7 @@ type Item = { to: string; label: string; icon: string };
 
 const items: Item[] = [
   { to: '/home', label: 'Home', icon: '🏠' },
-  { to: '/cadastros', label: 'Cadastros', icon: '👤' },
+  { to: '/cadastros', label: 'Usuarios', icon: '👤' },
   { to: '/fases', label: 'Fases', icon: '🏗️' },
   { to: '/fatura', label: 'Fatura', icon: '🧾' }
 ];
@@ -80,4 +80,3 @@ export function Sidebar({
     </aside>
   );
 }
-
