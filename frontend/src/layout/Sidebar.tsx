@@ -6,7 +6,7 @@ const items: Item[] = [
   { to: '/home', label: 'Home', icon: '🏠' },
   { to: '/cadastros', label: 'Usuarios', icon: '👤' },
   { to: '/fases', label: 'Fases', icon: '🏗️' },
-  { to: '/fatura', label: 'Fatura', icon: '🧾' }
+  { to: '/fatura', label: 'Faturas', icon: '🧾' }
 ];
 
 export function Sidebar({
