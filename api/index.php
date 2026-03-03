@@ -140,8 +140,35 @@ if ($relativePath === '/login' && $method === 'POST') {
         exit;
     }
 
-    $hash = (string)($user['password_hash'] ?? '');
-    if ($hash === '' || !password_verify($password, $hash)) {
+    $stored = (string)($user['password_hash'] ?? '');
+    if ($stored === '') {
+        json_response(['detail' => 'Credenciais inválidas.'], 401);
+        exit;
+    }
+
+    $info = password_get_info($stored);
+    $isHash = is_array($info) && (int)($info['algo'] ?? 0) !== 0;
+
+    $ok = false;
+    if ($isHash) {
+        $ok = password_verify($password, $stored);
+    } else {
+        // Compat: banco com senha em texto puro (coluna password_hash).
+        // Se bater, faz upgrade automático para hash.
+        $ok = hash_equals($stored, $password);
+        if ($ok) {
+            $newHash = password_hash($password, PASSWORD_DEFAULT);
+            try {
+                $pdo = Database::connection();
+                $stmt = $pdo->prepare('UPDATE uc_users SET password_hash = ?, updated_at = updated_at WHERE user_id = ?');
+                $stmt->execute([$newHash, (string)$user['user_id']]);
+            } catch (Throwable $e) {
+                error_log('[UC] password upgrade failed: ' . $e->getMessage());
+            }
+        }
+    }
+
+    if (!$ok) {
         json_response(['detail' => 'Credenciais inválidas.'], 401);
         exit;
     }
