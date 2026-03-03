@@ -454,16 +454,12 @@ if ($relativePath === '/cadastros' && $method === 'POST') {
     $notas = optional_string($payload['notas'] ?? null);
     $resetSenha = (bool)($payload['reset_senha'] ?? false);
 
-    $now = now_datetime_ms();
     $passwordHash = password_hash('UnderConstruction', PASSWORD_DEFAULT);
-    $userId = uuid_v4();
 
     $pdo = Database::connection();
     try {
-        // Tabela atual no MySQL usa apenas `code` (não existe `codigo` por enquanto).
-        $stmt = $pdo->prepare('INSERT INTO uc_users (user_id, code, foto, tipo_usuario, nome, cpf_cnpj, telefone, endereco, email, notas, status, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        $stmt = $pdo->prepare('INSERT INTO uc_users (code, foto, tipo_usuario, nome, cpf_cnpj, telefone, endereco, email, notas, status, password_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         $stmt->execute([
-            $userId,
             $code,
             $foto,
             $tipoUsuario,
@@ -475,12 +471,10 @@ if ($relativePath === '/cadastros' && $method === 'POST') {
             $notas,
             $status,
             $passwordHash,
-            $now,
-            $now,
         ]);
     } catch (PDOException $e) {
         if ($e->getCode() === '23000') {
-            json_response(['detail' => 'CPF/CNPJ ou email já cadastrado.'], 409);
+            json_response(['detail' => 'CPF/CNPJ já cadastrado.'], 409);
             exit;
         }
         throw $e;
@@ -490,6 +484,7 @@ if ($relativePath === '/cadastros' && $method === 'POST') {
         // Nada extra a fazer para novos cadastros; para edições futuras, este flag pede reset.
     }
 
+    $userId = (int)$pdo->lastInsertId();
     json_response([
         'userId' => $userId,
         'nome' => $nome,
@@ -626,7 +621,11 @@ if ($relativePath === '/fases' && $method === 'POST') {
     $previsaoFinalizacao = parse_datetime_or_null($payload['previsao_finalizacao'] ?? '', 'previsao_finalizacao', true);
     $dataFinalizacao = parse_datetime_or_null($payload['data_finalizacao'] ?? '', 'data_finalizacao', false);
 
-    $responsavelId = optional_string($payload['responsavel_id'] ?? null);
+    $responsavelIdRaw = optional_string($payload['responsavel_id'] ?? null);
+    $responsavelId = null;
+    if ($responsavelIdRaw !== null && ctype_digit($responsavelIdRaw)) {
+        $responsavelId = (int)$responsavelIdRaw;
+    }
     $valorTotal = normalize_decimal($payload['valor_total'] ?? null, 'valor_total', 2, true);
     $valorParcial = normalize_decimal($payload['valor_parcial'] ?? null, 'valor_parcial', 2, true);
     if ((float)$valorParcial > (float)$valorTotal) {
@@ -634,13 +633,9 @@ if ($relativePath === '/fases' && $method === 'POST') {
     }
     $notas = optional_string($payload['notas'] ?? null);
 
-    $now = now_datetime_ms();
-    $faseId = uuid_v4();
-
     $pdo = Database::connection();
-    $stmt = $pdo->prepare('INSERT INTO uc_fases (fase_id, code, fase, status, data_inicio, previsao_finalizacao, data_finalizacao, responsavel_id, valor_total, valor_parcial, notas, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    $stmt = $pdo->prepare('INSERT INTO uc_fases (code, fase, status, data_inicio, previsao_finalizacao, data_finalizacao, responsavel_id, valor_total, valor_parcial, notas) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
     $stmt->execute([
-        $faseId,
         $code,
         $fase,
         $status,
@@ -651,10 +646,9 @@ if ($relativePath === '/fases' && $method === 'POST') {
         $valorTotal,
         $valorParcial,
         $notas,
-        $now,
-        $now,
     ]);
 
+    $faseId = (int)$pdo->lastInsertId();
     json_response([
         'faseId' => $faseId,
         'fase' => $fase,
@@ -695,12 +689,22 @@ if ($relativePath === '/faturas' && $method === 'POST') {
     }
     $total = normalize_decimal((float)$valor * (float)$quantidade, 'total', 2, true);
 
-    $faseId = trim((string)($payload['fase_id'] ?? ''));
-    if ($faseId === '') {
+    $faseIdRaw = trim((string)($payload['fase_id'] ?? ''));
+    if ($faseIdRaw === '' || !ctype_digit($faseIdRaw)) {
         fail_validation('fase_id', 'Fase obrigatória');
     }
-    $responsavelId = optional_string($payload['responsavel_id'] ?? null);
-    $empresaId = optional_string($payload['empresa_id'] ?? null);
+    $faseId = (int)$faseIdRaw;
+
+    $responsavelIdRaw = optional_string($payload['responsavel_id'] ?? null);
+    $responsavelId = null;
+    if ($responsavelIdRaw !== null && ctype_digit($responsavelIdRaw)) {
+        $responsavelId = (int)$responsavelIdRaw;
+    }
+    $empresaIdRaw = optional_string($payload['empresa_id'] ?? null);
+    $empresaId = null;
+    if ($empresaIdRaw !== null && ctype_digit($empresaIdRaw)) {
+        $empresaId = (int)$empresaIdRaw;
+    }
 
     $dataPagamento = null;
     if ($pagamento === 'pago') {
@@ -709,14 +713,9 @@ if ($relativePath === '/faturas' && $method === 'POST') {
         $dataPagamento = null;
     }
 
-    $now = now_datetime_ms();
-    $faturaId = uuid_v4();
-
     $pdo = Database::connection();
-    // Tabela atual no MySQL usa apenas `code` (não existe `codigo` por enquanto).
-    $stmt = $pdo->prepare('INSERT INTO uc_faturas (fatura_id, code, descricao, data, lancamento, data_pagamento, status, pagamento, valor, quantidade, total, fase_id, responsavel_id, empresa_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    $stmt = $pdo->prepare('INSERT INTO uc_faturas (code, descricao, data, lancamento, data_pagamento, status, pagamento, valor, quantidade, total, fase_id, responsavel_id, empresa_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
     $stmt->execute([
-        $faturaId,
         $code,
         $descricao,
         $data,
@@ -730,10 +729,9 @@ if ($relativePath === '/faturas' && $method === 'POST') {
         $faseId,
         $responsavelId,
         $empresaId,
-        $now,
-        $now,
     ]);
 
+    $faturaId = (int)$pdo->lastInsertId();
     json_response([
         'faturaId' => $faturaId,
         'descricao' => $descricao,
