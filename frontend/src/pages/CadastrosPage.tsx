@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { apiFetch } from '../api/client';
+import { useAuth } from '../auth/auth';
 
 const schema = z.object({
   foto: z.string().optional(),
@@ -73,6 +74,8 @@ async function uploadFoto(file: File): Promise<UploadResponse> {
 }
 
 export default function CadastrosPage() {
+  const { user } = useAuth();
+  const canWrite = ['Owner', 'Engenheiro', 'Gerente'].includes(user?.tipoUsuario || '');
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<'create' | 'edit'>('create');
   const [editingRow, setEditingRow] = useState<any | null>(null);
@@ -140,6 +143,7 @@ export default function CadastrosPage() {
         </div>
         <button
           className="btn primary"
+          disabled={!canWrite}
           onClick={() => {
             setMode('create');
             setEditingRow(null);
@@ -224,6 +228,7 @@ export default function CadastrosPage() {
                       className="btn"
                       type="button"
                       title="Editar"
+                      disabled={!canWrite}
                       onClick={() => {
                         setMode('edit');
                         setEditingRow(r);
@@ -264,6 +269,7 @@ export default function CadastrosPage() {
               <button
                 className="btn danger"
                 type="button"
+                disabled={!canWrite}
                 onClick={() => {
                   setDeletePassword('');
                   setDeleteOpen(true);

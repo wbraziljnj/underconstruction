@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { apiFetch } from '../api/client';
 import { useEffect } from 'react';
+import { useAuth } from '../auth/auth';
 
 const schema = z
   .object({
@@ -91,6 +92,8 @@ function nowLocalDatetime() {
 }
 
 export default function FaturaPage() {
+  const { user } = useAuth();
+  const canWrite = ['Owner', 'Engenheiro', 'Gerente'].includes(user?.tipoUsuario || '');
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<'create' | 'edit'>('create');
   const [editingRow, setEditingRow] = useState<any | null>(null);
@@ -186,6 +189,7 @@ export default function FaturaPage() {
         </div>
         <button
           className="btn primary"
+          disabled={!canWrite}
           onClick={() => {
             setMode('create');
             setEditingRow(null);
@@ -266,7 +270,8 @@ export default function FaturaPage() {
                       className="btn"
                       type="button"
                       title="Editar"
-                  onClick={() => {
+                      disabled={!canWrite}
+                      onClick={() => {
                         setMode('edit');
                         setEditingRow(r);
                         form.reset({
@@ -307,6 +312,7 @@ export default function FaturaPage() {
               <button
                 className="btn danger"
                 type="button"
+                disabled={!canWrite}
                 onClick={() => {
                   setDeletePassword('');
                   setDeleteOpen(true);

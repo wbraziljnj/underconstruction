@@ -73,6 +73,22 @@ function verify_current_user_password(string $password): void
     }
 }
 
+function require_privileged_role(): void
+{
+    $userId = require_authenticated_user_id();
+    $row = fetch_one('SELECT tipo_usuario FROM uc_users WHERE user_id = ? LIMIT 1', [(int)$userId]);
+    if (!$row) {
+        json_response(['detail' => 'Não autenticado.'], 401);
+        exit;
+    }
+    $tipo = (string)($row['tipo_usuario'] ?? '');
+    $allowed = ['Owner', 'Engenheiro', 'Gerente'];
+    if (!in_array($tipo, $allowed, true)) {
+        json_response(['detail' => 'Sem permissão.'], 403);
+        exit;
+    }
+}
+
 if ($relativePath === '/upload-foto' && $method === 'POST') {
     require_authenticated_user_id();
     require_active_obra_codigo();
@@ -437,6 +453,7 @@ if ($relativePath === '/faturas' && $method === 'GET') {
 
 if ($relativePath === '/cadastros' && $method === 'POST') {
     require_authenticated_user_id();
+    require_privileged_role();
     $code = require_active_obra_codigo();
 
     $payload = parse_json_body();
@@ -445,6 +462,13 @@ if ($relativePath === '/cadastros' && $method === 'POST') {
     $allowedTipos = ['Pedreiro', 'Ajudante', 'FornecedorMateriais', 'Engenheiro', 'PrestadorServico', 'Gerente', 'Owner'];
     if (!in_array($tipoUsuario, $allowedTipos, true)) {
         fail_validation('tipo_usuario', 'Tipo de usuário inválido');
+    }
+    if ($tipoUsuario === 'Owner') {
+        $existingOwner = fetch_one('SELECT user_id FROM uc_users WHERE code = ? AND tipo_usuario = ? LIMIT 1', [$code, 'Owner']);
+        if ($existingOwner) {
+            json_response(['detail' => 'Já existe um Owner para este código.'], 409);
+            exit;
+        }
     }
 
     $nome = trim((string)($payload['nome'] ?? ''));
@@ -519,6 +543,7 @@ if ($relativePath === '/cadastros' && $method === 'POST') {
 
 if (preg_match('#^/cadastros/([^/]+)$#', $relativePath, $m) && $method === 'PUT') {
     require_authenticated_user_id();
+    require_privileged_role();
     $code = require_active_obra_codigo();
     $userId = trim((string)$m[1]);
     if ($userId === '') {
@@ -538,6 +563,16 @@ if (preg_match('#^/cadastros/([^/]+)$#', $relativePath, $m) && $method === 'PUT'
     $allowedTipos = ['Pedreiro', 'Ajudante', 'FornecedorMateriais', 'Engenheiro', 'PrestadorServico', 'Gerente', 'Owner'];
     if (!in_array($tipoUsuario, $allowedTipos, true)) {
         fail_validation('tipo_usuario', 'Tipo de usuário inválido');
+    }
+    if ($tipoUsuario === 'Owner') {
+        $existingOwner = fetch_one(
+            'SELECT user_id FROM uc_users WHERE code = ? AND tipo_usuario = ? AND user_id != ? LIMIT 1',
+            [$code, 'Owner', (int)$userId]
+        );
+        if ($existingOwner) {
+            json_response(['detail' => 'Já existe um Owner para este código.'], 409);
+            exit;
+        }
     }
 
     $nome = trim((string)($payload['nome'] ?? ''));
@@ -625,6 +660,7 @@ if (preg_match('#^/cadastros/([^/]+)$#', $relativePath, $m) && $method === 'PUT'
 
 if (preg_match('#^/cadastros/(\\d+)$#', $relativePath, $m) && $method === 'DELETE') {
     require_authenticated_user_id();
+    require_privileged_role();
     $code = require_active_obra_codigo();
     $targetId = (int)$m[1];
 
@@ -651,6 +687,7 @@ if (preg_match('#^/cadastros/(\\d+)$#', $relativePath, $m) && $method === 'DELET
 
 if ($relativePath === '/fases' && $method === 'POST') {
     require_authenticated_user_id();
+    require_privileged_role();
     $code = require_active_obra_codigo();
 
     $payload = parse_json_body();
@@ -707,6 +744,7 @@ if ($relativePath === '/fases' && $method === 'POST') {
 
 if (preg_match('#^/fases/(\\d+)$#', $relativePath, $m) && $method === 'PUT') {
     require_authenticated_user_id();
+    require_privileged_role();
     $code = require_active_obra_codigo();
     $faseId = (int)$m[1];
 
@@ -793,6 +831,7 @@ if (preg_match('#^/fases/(\\d+)$#', $relativePath, $m) && $method === 'PUT') {
 
 if (preg_match('#^/fases/(\\d+)$#', $relativePath, $m) && $method === 'DELETE') {
     require_authenticated_user_id();
+    require_privileged_role();
     $code = require_active_obra_codigo();
     $faseId = (int)$m[1];
 
@@ -820,6 +859,7 @@ if (preg_match('#^/fases/(\\d+)$#', $relativePath, $m) && $method === 'DELETE') 
 
 if ($relativePath === '/faturas' && $method === 'POST') {
     require_authenticated_user_id();
+    require_privileged_role();
     $code = require_active_obra_codigo();
 
     $payload = parse_json_body();
@@ -905,6 +945,7 @@ if ($relativePath === '/faturas' && $method === 'POST') {
 
 if (preg_match('#^/faturas/(\\d+)$#', $relativePath, $m) && $method === 'PUT') {
     require_authenticated_user_id();
+    require_privileged_role();
     $code = require_active_obra_codigo();
     $faturaId = (int)$m[1];
 
@@ -1022,6 +1063,7 @@ if (preg_match('#^/faturas/(\\d+)$#', $relativePath, $m) && $method === 'PUT') {
 
 if (preg_match('#^/faturas/(\\d+)$#', $relativePath, $m) && $method === 'DELETE') {
     require_authenticated_user_id();
+    require_privileged_role();
     $code = require_active_obra_codigo();
     $faturaId = (int)$m[1];
 
