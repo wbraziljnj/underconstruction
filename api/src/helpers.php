@@ -103,6 +103,10 @@ function parse_datetime_or_null(mixed $value, string $field, bool $required = fa
         }
         return null;
     }
+    // Suporta YYYY-MM-DD vindo de inputs type="date"
+    if (preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $raw)) {
+        return $raw . ' 00:00:00';
+    }
     $dt = date_create($raw);
     if ($dt === false) {
         fail_validation($field, sprintf('%s inválido', $field));

@@ -54,6 +54,14 @@ function toDatetimeLocal(value?: string | null) {
   )}`;
 }
 
+function toDateOnlyLocal(value?: string | null) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 function PencilIcon({ title = 'Editar' }: { title?: string }) {
   return (
     <svg
@@ -99,7 +107,7 @@ export default function FaturaPage() {
   const defaults = useMemo<FormValues>(
     () => ({
       data: '',
-      lancamento: nowLocalDatetime(),
+      lancamento: new Date().toISOString().slice(0, 10),
       data_pagamento: '',
       status: 'ATIVO',
       pagamento: 'aberto',
@@ -255,14 +263,14 @@ export default function FaturaPage() {
                       className="btn"
                       type="button"
                       title="Editar"
-                      onClick={() => {
+                  onClick={() => {
                         setMode('edit');
                         setEditingRow(r);
                         form.reset({
                           descricao: r.fatura || '',
-                          data: toDatetimeLocal(r.data),
-                          lancamento: toDatetimeLocal(r.lancamento) || nowLocalDatetime(),
-                          data_pagamento: toDatetimeLocal(r.dataPagamento),
+                          data: toDateOnlyLocal(r.data),
+                          lancamento: toDateOnlyLocal(r.lancamento) || toDateOnlyLocal(new Date().toISOString()),
+                          data_pagamento: toDateOnlyLocal(r.dataPagamento),
                           status: r.status || 'ATIVO',
                           pagamento: r.pagamento || 'aberto',
                           valor: Number(r.valor || 0),
@@ -347,7 +355,7 @@ export default function FaturaPage() {
 
           <label>
             <div style={{ fontSize: 12, opacity: 0.8 }}>Data (datetime)</div>
-            <input className="input" type="datetime-local" {...form.register('data')} />
+            <input className="input" type="date" {...form.register('data')} />
             {form.formState.errors.data && (
               <div style={{ color: 'var(--danger)', fontSize: 12 }}>{form.formState.errors.data.message}</div>
             )}
@@ -355,7 +363,7 @@ export default function FaturaPage() {
 
           <label>
             <div style={{ fontSize: 12, opacity: 0.8 }}>Lançamento (auto)</div>
-            <input className="input" type="datetime-local" disabled value={form.watch('lancamento') || ''} />
+            <input className="input" type="date" disabled value={toDateOnlyLocal(form.watch('lancamento') || '')} />
           </label>
 
           <label>
@@ -378,7 +386,7 @@ export default function FaturaPage() {
 
           <label>
             <div style={{ fontSize: 12, opacity: 0.8 }}>Data pagamento (opcional)</div>
-            <input className="input" type="datetime-local" {...form.register('data_pagamento')} />
+            <input className="input" type="date" {...form.register('data_pagamento')} />
             {form.formState.errors.data_pagamento && (
               <div style={{ color: 'var(--danger)', fontSize: 12 }}>
                 {form.formState.errors.data_pagamento.message}
