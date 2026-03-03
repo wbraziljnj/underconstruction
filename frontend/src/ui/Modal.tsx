@@ -31,7 +31,7 @@ export default function Modal({
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(0,0,0,0.55)',
+        background: 'rgba(0,0,0,0.78)',
         display: 'grid',
         placeItems: 'center',
         padding: 16,
@@ -41,7 +41,15 @@ export default function Modal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="card" style={{ width: 'min(760px, 100%)', padding: 12 }}>
+      <div
+        className="card"
+        style={{
+          width: 'min(760px, 100%)',
+          padding: 12,
+          background: 'var(--bg)',
+          border: '1px solid var(--border)'
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div style={{ fontWeight: 800 }}>{title}</div>
           <button className="btn" onClick={onClose} aria-label="Fechar">
@@ -54,4 +62,3 @@ export default function Modal({
     </div>
   );
 }
-
