@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Modal from '../ui/Modal';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { apiFetch } from '../api/client';
 
 const schema = z.object({
   foto: z.string().optional(),
@@ -26,10 +27,41 @@ const schema = z.object({
 });
 
 type FormValues = z.infer<typeof schema>;
+type UploadResponse = { path?: string; url?: string; filename?: string };
+
+function apiBaseUrl() {
+  const baseUrl = (import.meta as any).env?.BASE_URL ?? '/';
+  return `${String(baseUrl).replace(/\/?$/, '/')}`;
+}
+
+async function uploadFoto(file: File): Promise<UploadResponse> {
+  const fd = new FormData();
+  fd.append('foto', file);
+
+  const res = await fetch(`${apiBaseUrl()}api/upload-foto`, {
+    method: 'POST',
+    credentials: 'include',
+    body: fd
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const detail = (data as any)?.detail || (data as any)?.error || 'Falha no upload';
+    throw new Error(detail);
+  }
+  return data as UploadResponse;
+}
 
 export default function CadastrosPage() {
   const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [selectedPhotoFile, setSelectedPhotoFile] = useState<File | null>(null);
+  const [rows, setRows] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [listError, setListError] = useState<string | null>(null);
+  const [q, setQ] = useState('');
+  const [tipoFilter, setTipoFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
 
   const defaults = useMemo<FormValues>(
     () => ({
@@ -52,6 +84,28 @@ export default function CadastrosPage() {
     defaultValues: defaults
   });
 
+  async function load() {
+    setLoading(true);
+    setListError(null);
+    try {
+      const params = new URLSearchParams();
+      if (q.trim()) params.set('q', q.trim());
+      if (tipoFilter) params.set('tipo_usuario', tipoFilter);
+      if (statusFilter) params.set('status', statusFilter);
+      const res = await apiFetch<{ items: any[] }>(`/cadastros?${params.toString()}`, { method: 'GET' });
+      setRows(res.items || []);
+    } catch (e) {
+      setListError(e instanceof Error ? e.message : 'Falha ao carregar usuários');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="card" style={{ padding: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
@@ -70,9 +124,14 @@ export default function CadastrosPage() {
           + Novo
         </button>
       </div>
-      <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 10 }}>
-        <input className="input" placeholder="Buscar por nome / CPF/CNPJ / email" />
-        <select className="input" defaultValue="">
+      <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 10 }}>
+        <input
+          className="input"
+          placeholder="Buscar por nome / CPF/CNPJ / email"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+        <select className="input" value={tipoFilter} onChange={(e) => setTipoFilter(e.target.value)}>
           <option value="">Tipo (todos)</option>
           <option value="Pedreiro">Pedreiro</option>
           <option value="Ajudante">Ajudante</option>
@@ -82,11 +141,14 @@ export default function CadastrosPage() {
           <option value="Gerente">Gerente</option>
           <option value="Owner">Owner</option>
         </select>
-        <select className="input" defaultValue="">
+        <select className="input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="">Status (todos)</option>
           <option value="ATIVO">Ativo</option>
           <option value="INATIVO">Inativo</option>
         </select>
+        <button className="btn" onClick={() => load()} disabled={loading}>
+          Filtrar
+        </button>
       </div>
 
       <div style={{ marginTop: 12, overflowX: 'auto' }}>
@@ -103,11 +165,37 @@ export default function CadastrosPage() {
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td colSpan={7} style={{ padding: 12, opacity: 0.7 }}>
-                Carregando/sem dados (API será integrada na próxima etapa).
-              </td>
-            </tr>
+            {listError ? (
+              <tr>
+                <td colSpan={7} style={{ padding: 12, color: 'var(--danger)' }}>
+                  {listError}
+                </td>
+              </tr>
+            ) : loading ? (
+              <tr>
+                <td colSpan={7} style={{ padding: 12, opacity: 0.7 }}>
+                  Carregando...
+                </td>
+              </tr>
+            ) : rows.length === 0 ? (
+              <tr>
+                <td colSpan={7} style={{ padding: 12, opacity: 0.7 }}>
+                  Nenhum usuário encontrado.
+                </td>
+              </tr>
+            ) : (
+              rows.map((r) => (
+                <tr key={r.userId} style={{ borderTop: '1px solid var(--border)' }}>
+                  <td style={{ padding: 10 }}>{r.nome}</td>
+                  <td style={{ padding: 10 }}>{r.tipoUsuario}</td>
+                  <td style={{ padding: 10 }}>{r.cpfCnpj}</td>
+                  <td style={{ padding: 10 }}>{r.telefone}</td>
+                  <td style={{ padding: 10 }}>{r.email}</td>
+                  <td style={{ padding: 10 }}>{r.status}</td>
+                  <td style={{ padding: 10, opacity: 0.7, fontSize: 12 }}>{r.createdAt}</td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -123,18 +211,33 @@ export default function CadastrosPage() {
             </button>
             <button
               className="btn primary"
+              disabled={saving}
               onClick={form.handleSubmit(async (values) => {
-                // TODO: integrar POST /api/cadastros (uc_users)
-                // Se reset_senha = true (edição), backend deve setar senha padrão "UnderConstruction".
-                console.log('usuario_payload', {
-                  ...values,
-                  fotoFile: selectedPhotoFile ? { name: selectedPhotoFile.name, type: selectedPhotoFile.type } : null
-                });
-                setOpen(false);
+                try {
+                  setSaving(true);
+                  let fotoPath = values.foto || '';
+                  if (selectedPhotoFile) {
+                    const uploaded = await uploadFoto(selectedPhotoFile);
+                    fotoPath = uploaded.path || uploaded.url || uploaded.filename || '';
+                  }
+                  await apiFetch('/cadastros', {
+                    method: 'POST',
+                    json: {
+                      ...values,
+                      foto: fotoPath || null,
+                      reset_senha: Boolean(values.reset_senha)
+                    }
+                  });
+                  setOpen(false);
+                } catch (e) {
+                  alert(e instanceof Error ? e.message : 'Falha ao salvar usuário');
+                } finally {
+                  setSaving(false);
+                }
               })}
               type="button"
             >
-              Salvar
+              {saving ? 'Salvando...' : 'Salvar'}
             </button>
           </div>
         }

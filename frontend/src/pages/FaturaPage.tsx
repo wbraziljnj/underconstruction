@@ -46,9 +46,16 @@ function nowLocalDatetime() {
 
 export default function FaturaPage() {
   const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [users, setUsers] = useState<UserOption[]>([]);
   const [fases, setFases] = useState<FaseOption[]>([]);
   const [optionsError, setOptionsError] = useState<string | null>(null);
+  const [rows, setRows] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [listError, setListError] = useState<string | null>(null);
+  const [q, setQ] = useState('');
+  const [pagamentoFilter, setPagamentoFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
 
   const defaults = useMemo<FormValues>(
     () => ({
@@ -75,6 +82,28 @@ export default function FaturaPage() {
 
   const valor = form.watch('valor');
   const quantidade = form.watch('quantidade');
+
+  async function load() {
+    setLoading(true);
+    setListError(null);
+    try {
+      const params = new URLSearchParams();
+      if (q.trim()) params.set('q', q.trim());
+      if (pagamentoFilter) params.set('pagamento', pagamentoFilter);
+      if (statusFilter) params.set('status', statusFilter);
+      const res = await apiFetch<{ items: any[] }>(`/faturas?${params.toString()}`, { method: 'GET' });
+      setRows(res.items || []);
+    } catch (e) {
+      setListError(e instanceof Error ? e.message : 'Falha ao carregar faturas');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -119,20 +148,28 @@ export default function FaturaPage() {
         </button>
       </div>
 
-      <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 10 }}>
-        <input className="input" placeholder="Buscar por descrição / fase / responsável" />
-        <select className="input" defaultValue="">
+      <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: 10 }}>
+        <input
+          className="input"
+          placeholder="Buscar por fatura / fase / responsável / empresa"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+        <select className="input" value={pagamentoFilter} onChange={(e) => setPagamentoFilter(e.target.value)}>
           <option value="">Pagamento (todos)</option>
           <option value="aberto">Aberto</option>
           <option value="pendente">Pendente</option>
           <option value="pago">Pago</option>
         </select>
-        <select className="input" defaultValue="">
+        <select className="input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="">Status (todos)</option>
           <option value="ATIVO">Ativo</option>
           <option value="INATIVO">Inativo</option>
         </select>
-        <input className="input" placeholder="Data (YYYY-MM-DD)" />
+        <input className="input" placeholder="Data (filtro depois)" disabled />
+        <button className="btn" onClick={() => load()} disabled={loading}>
+          Filtrar
+        </button>
       </div>
 
       <div style={{ marginTop: 12, overflowX: 'auto' }}>
@@ -149,11 +186,37 @@ export default function FaturaPage() {
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td colSpan={7} style={{ padding: 12, opacity: 0.7 }}>
-                Carregando/sem dados (API será integrada na próxima etapa).
-              </td>
-            </tr>
+            {listError ? (
+              <tr>
+                <td colSpan={7} style={{ padding: 12, color: 'var(--danger)' }}>
+                  {listError}
+                </td>
+              </tr>
+            ) : loading ? (
+              <tr>
+                <td colSpan={7} style={{ padding: 12, opacity: 0.7 }}>
+                  Carregando...
+                </td>
+              </tr>
+            ) : rows.length === 0 ? (
+              <tr>
+                <td colSpan={7} style={{ padding: 12, opacity: 0.7 }}>
+                  Nenhuma fatura encontrada.
+                </td>
+              </tr>
+            ) : (
+              rows.map((r) => (
+                <tr key={r.faturaId} style={{ borderTop: '1px solid var(--border)' }}>
+                  <td style={{ padding: 10 }}>{r.data}</td>
+                  <td style={{ padding: 10 }}>{r.fatura}</td>
+                  <td style={{ padding: 10 }}>{r.quantidade}</td>
+                  <td style={{ padding: 10 }}>{r.valor}</td>
+                  <td style={{ padding: 10 }}>{r.total}</td>
+                  <td style={{ padding: 10 }}>{r.pagamento}</td>
+                  <td style={{ padding: 10, opacity: 0.7, fontSize: 12 }}>{r.faseNome || '-'}</td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -169,6 +232,7 @@ export default function FaturaPage() {
             </button>
             <button
               className="btn primary"
+              disabled={saving}
               onClick={form.handleSubmit(async (values) => {
                 // UX: recalcula total antes de enviar; backend vai recalcular também.
                 const totalCalc = (Number(values.valor) || 0) * (Number(values.quantidade) || 0);
@@ -177,13 +241,22 @@ export default function FaturaPage() {
                 // Regra: se pagamento != pago, limpar data_pagamento
                 if (payload.pagamento !== 'pago') payload.data_pagamento = '';
 
-                // TODO: integrar POST /api/faturas (uc_faturas)
-                console.log('nova_fatura', payload);
-                setOpen(false);
+                try {
+                  setSaving(true);
+                  await apiFetch('/faturas', {
+                    method: 'POST',
+                    json: payload
+                  });
+                  setOpen(false);
+                } catch (e) {
+                  alert(e instanceof Error ? e.message : 'Falha ao salvar fatura');
+                } finally {
+                  setSaving(false);
+                }
               })}
               type="button"
             >
-              Salvar
+              {saving ? 'Salvando...' : 'Salvar'}
             </button>
           </div>
         }

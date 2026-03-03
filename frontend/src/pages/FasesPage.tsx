@@ -1,8 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Modal from '../ui/Modal';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { apiFetch } from '../api/client';
+import { apiFetch } from '../api/client';
 
 const schema = z
   .object({
@@ -31,6 +33,11 @@ function toLocalDatetimeInputValue(value?: string) {
 
 export default function FasesPage() {
   const [open, setOpen] = useState(false);
+  const [rows, setRows] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [listError, setListError] = useState<string | null>(null);
+  const [q, setQ] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const defaults = useMemo<FormValues>(
     () => ({
@@ -52,6 +59,26 @@ export default function FasesPage() {
     defaultValues: defaults
   });
 
+  async function load() {
+    setLoading(true);
+    setListError(null);
+    try {
+      const params = new URLSearchParams();
+      if (q.trim()) params.set('q', q.trim());
+      const res = await apiFetch<{ items: any[] }>(`/fases?${params.toString()}`, { method: 'GET' });
+      setRows(res.items || []);
+    } catch (e) {
+      setListError(e instanceof Error ? e.message : 'Falha ao carregar fases');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="card" style={{ padding: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
@@ -70,15 +97,23 @@ export default function FasesPage() {
         </button>
       </div>
 
-      <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 10 }}>
-        <input className="input" placeholder="Buscar por fase / responsável" />
-        <input className="input" placeholder="Data início (YYYY-MM-DD)" />
-        <select className="input" defaultValue="">
+      <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 10 }}>
+        <input
+          className="input"
+          placeholder="Buscar por fase / responsável"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+        <input className="input" placeholder="Data início (filtro depois)" disabled />
+        <select className="input" defaultValue="" disabled>
           <option value="">Status (todos)</option>
           <option value="ABERTA">Aberta</option>
           <option value="PENDENTE">Pendente</option>
           <option value="FINALIZADA">Finalizada</option>
         </select>
+        <button className="btn" onClick={() => load()} disabled={loading}>
+          Filtrar
+        </button>
       </div>
 
       <div style={{ marginTop: 12, overflowX: 'auto' }}>
@@ -95,11 +130,37 @@ export default function FasesPage() {
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td colSpan={7} style={{ padding: 12, opacity: 0.7 }}>
-                Carregando/sem dados (API será integrada na próxima etapa).
-              </td>
-            </tr>
+            {listError ? (
+              <tr>
+                <td colSpan={7} style={{ padding: 12, color: 'var(--danger)' }}>
+                  {listError}
+                </td>
+              </tr>
+            ) : loading ? (
+              <tr>
+                <td colSpan={7} style={{ padding: 12, opacity: 0.7 }}>
+                  Carregando...
+                </td>
+              </tr>
+            ) : rows.length === 0 ? (
+              <tr>
+                <td colSpan={7} style={{ padding: 12, opacity: 0.7 }}>
+                  Nenhuma fase encontrada.
+                </td>
+              </tr>
+            ) : (
+              rows.map((r) => (
+                <tr key={r.faseId} style={{ borderTop: '1px solid var(--border)' }}>
+                  <td style={{ padding: 10 }}>{r.fase}</td>
+                  <td style={{ padding: 10 }}>{r.dataInicio}</td>
+                  <td style={{ padding: 10 }}>{r.previsaoFinalizacao}</td>
+                  <td style={{ padding: 10 }}>{r.dataFinalizacao || '-'}</td>
+                  <td style={{ padding: 10 }}>{r.responsavelNome || '-'}</td>
+                  <td style={{ padding: 10 }}>{r.valorTotal}</td>
+                  <td style={{ padding: 10 }} />
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -115,14 +176,24 @@ export default function FasesPage() {
             </button>
             <button
               className="btn primary"
+              disabled={saving}
               onClick={form.handleSubmit(async (values) => {
-                // TODO: integrar POST /api/fases (uc_fases)
-                console.log('nova_fase', values);
-                setOpen(false);
+                try {
+                  setSaving(true);
+                  await apiFetch('/fases', {
+                    method: 'POST',
+                    json: values
+                  });
+                  setOpen(false);
+                } catch (e) {
+                  alert(e instanceof Error ? e.message : 'Falha ao salvar fase');
+                } finally {
+                  setSaving(false);
+                }
               })}
               type="button"
             >
-              Salvar
+              {saving ? 'Salvando...' : 'Salvar'}
             </button>
           </div>
         }
