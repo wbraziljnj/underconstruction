@@ -52,6 +52,9 @@ function require_authenticated_user_id(): string
 {
     start_session_if_needed();
     $userId = $_SESSION['uc_user_id'] ?? null;
+    if (is_int($userId)) {
+        return (string)$userId;
+    }
     if (!is_string($userId) || trim($userId) === '') {
         json_response(['detail' => 'Não autenticado.'], 401);
         exit;
