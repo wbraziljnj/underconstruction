@@ -256,10 +256,10 @@ export default function CadastrosPage() {
 
           <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 12, opacity: 0.75, fontSize: 12 }}>
             <div>
-              <b>created_at:</b> (auto)
+              <b>created_at:</b> —
             </div>
             <div>
-              <b>updated_at:</b> (auto)
+              <b>updated_at:</b> —
             </div>
           </div>
         </form>
