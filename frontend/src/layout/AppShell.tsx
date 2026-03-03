@@ -27,7 +27,10 @@ export default function AppShell() {
         <button className="btn" onClick={() => toggleTheme()} title="Tema">
           🌓
         </button>
-        <div style={{ opacity: 0.8, fontSize: 12 }}>{user?.nome}</div>
+        <div style={{ display: 'grid', lineHeight: 1.1 }}>
+          <div style={{ opacity: 0.9, fontSize: 12 }}>{user?.nome}</div>
+          <div style={{ opacity: 0.7, fontSize: 12 }}>{user?.tipoUsuario || ''}</div>
+        </div>
         <button className="btn" onClick={() => logout()} title="Sair">
           Sair
         </button>
@@ -58,9 +61,7 @@ export default function AppShell() {
         >
           <div>
             <div style={{ fontWeight: 700 }}>Under Construction</div>
-            <div style={{ opacity: 0.7, fontSize: 12 }}>
-              {user?.tipoUsuario ? `Tipo: ${user.tipoUsuario}` : 'Organização da obra'}
-            </div>
+            <div style={{ opacity: 0.7, fontSize: 12 }}>Organização da obra</div>
           </div>
           {headerRight}
         </header>
