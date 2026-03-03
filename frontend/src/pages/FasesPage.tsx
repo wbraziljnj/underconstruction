@@ -7,6 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 const schema = z
   .object({
     fase: z.string().min(1, 'Fase obrigatória'),
+    status: z.enum(['ABERTO', 'ANDAMENTO', 'PENDENTE', 'FINALIZADO']),
     data_inicio: z.string().min(1, 'Data início obrigatória'),
     previsao_finalizacao: z.string().min(1, 'Previsão obrigatória'),
     data_finalizacao: z.string().optional(),
@@ -35,6 +36,7 @@ export default function FasesPage() {
   const defaults = useMemo<FormValues>(
     () => ({
       fase: '',
+      status: 'ABERTO',
       data_inicio: '',
       previsao_finalizacao: '',
       data_finalizacao: '',
@@ -137,6 +139,16 @@ export default function FasesPage() {
             {form.formState.errors.fase && (
               <div style={{ color: 'var(--danger)', fontSize: 12 }}>{form.formState.errors.fase.message}</div>
             )}
+          </label>
+
+          <label>
+            <div style={{ fontSize: 12, opacity: 0.8 }}>Status</div>
+            <select className="input" {...form.register('status')}>
+              <option value="ABERTO">Aberto</option>
+              <option value="ANDAMENTO">Andamento</option>
+              <option value="PENDENTE">Pendente</option>
+              <option value="FINALIZADO">Finalizado</option>
+            </select>
           </label>
 
           <label>
