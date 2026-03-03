@@ -214,7 +214,7 @@ if ($relativePath === '/fases/options' && $method === 'GET') {
     $codigo = require_active_obra_codigo();
     $code = trim((string)($_SESSION['uc_code'] ?? $codigo));
     $rows = fetch_all(
-        'SELECT fase_id, fase, data_inicio, previsao_finalizacao, data_finalizacao FROM uc_fases WHERE code = ? AND deleted_at IS NULL ORDER BY data_inicio ASC',
+        'SELECT fase_id, fase, data_inicio, previsao_finalizacao, data_finalizacao, status FROM uc_fases WHERE code = ? ORDER BY data_inicio ASC',
         [$code]
     );
     $options = array_map(fn ($r) => [
@@ -223,6 +223,7 @@ if ($relativePath === '/fases/options' && $method === 'GET') {
         'dataInicio' => (string)$r['data_inicio'],
         'previsaoFinalizacao' => (string)$r['previsao_finalizacao'],
         'dataFinalizacao' => $r['data_finalizacao'] !== null ? (string)$r['data_finalizacao'] : null,
+        'status' => (string)($r['status'] ?? ''),
     ], $rows);
     json_response($options);
     exit;
@@ -285,11 +286,11 @@ if ($relativePath === '/fases' && $method === 'GET') {
     $q = trim((string)($_GET['q'] ?? ''));
 
     $sql = 'SELECT f.fase_id, f.fase, f.data_inicio, f.previsao_finalizacao, f.data_finalizacao, f.responsavel_id,
-                   f.valor_total, f.valor_parcial, f.notas, f.created_at, f.updated_at,
+                   f.status, f.valor_total, f.valor_parcial, f.notas, f.created_at, f.updated_at,
                    u.nome AS responsavel_nome
             FROM uc_fases f
             LEFT JOIN uc_users u ON u.user_id = f.responsavel_id
-            WHERE f.code = ? AND f.deleted_at IS NULL';
+            WHERE f.code = ?';
     $params = [$code];
 
     if ($q !== '') {
@@ -304,6 +305,7 @@ if ($relativePath === '/fases' && $method === 'GET') {
     $items = array_map(fn ($r) => [
         'faseId' => (string)$r['fase_id'],
         'fase' => (string)$r['fase'],
+        'status' => (string)($r['status'] ?? ''),
         'dataInicio' => (string)$r['data_inicio'],
         'previsaoFinalizacao' => (string)$r['previsao_finalizacao'],
         'dataFinalizacao' => $r['data_finalizacao'] !== null ? (string)$r['data_finalizacao'] : null,
@@ -503,13 +505,12 @@ if ($relativePath === '/fases' && $method === 'POST') {
     $faseId = uuid_v4();
 
     $pdo = Database::connection();
-    // Tabela atual no MySQL não possui coluna `status` nem `codigo`.
-    // O status permanece como campo de UI por enquanto.
-    $stmt = $pdo->prepare('INSERT INTO uc_fases (fase_id, code, fase, data_inicio, previsao_finalizacao, data_finalizacao, responsavel_id, valor_total, valor_parcial, notas, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    $stmt = $pdo->prepare('INSERT INTO uc_fases (fase_id, code, fase, status, data_inicio, previsao_finalizacao, data_finalizacao, responsavel_id, valor_total, valor_parcial, notas, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
     $stmt->execute([
         $faseId,
         $code,
         $fase,
+        $status,
         $dataInicio,
         $previsaoFinalizacao,
         $dataFinalizacao,
