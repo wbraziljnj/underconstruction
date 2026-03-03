@@ -58,7 +58,9 @@ export default function AppShell() {
         >
           <div>
             <div style={{ fontWeight: 700 }}>Under Construction</div>
-            <div style={{ opacity: 0.7, fontSize: 12 }}>Organização da obra</div>
+            <div style={{ opacity: 0.7, fontSize: 12 }}>
+              {user?.tipoUsuario ? `Tipo: ${user.tipoUsuario}` : 'Organização da obra'}
+            </div>
           </div>
           {headerRight}
         </header>
@@ -67,4 +69,3 @@ export default function AppShell() {
     </div>
   );
 }
-
