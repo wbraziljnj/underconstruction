@@ -54,7 +54,6 @@ export default function FaturaPage() {
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [q, setQ] = useState('');
-  const [pagamentoFilter, setPagamentoFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
   const defaults = useMemo<FormValues>(
@@ -89,8 +88,7 @@ export default function FaturaPage() {
     try {
       const params = new URLSearchParams();
       if (q.trim()) params.set('q', q.trim());
-      if (pagamentoFilter) params.set('pagamento', pagamentoFilter);
-      if (statusFilter) params.set('status', statusFilter);
+      if (statusFilter) params.set('pagamento', statusFilter);
       const res = await apiFetch<{ items: any[] }>(`/faturas?${params.toString()}`, { method: 'GET' });
       setRows(res.items || []);
     } catch (e) {
@@ -148,23 +146,18 @@ export default function FaturaPage() {
         </button>
       </div>
 
-      <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: 10 }}>
+      <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 10 }}>
         <input
           className="input"
           placeholder="Buscar por fatura / fase / responsável / empresa"
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        <select className="input" value={pagamentoFilter} onChange={(e) => setPagamentoFilter(e.target.value)}>
-          <option value="">Pagamento (todos)</option>
+        <select className="input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+          <option value="">Status (todos)</option>
           <option value="aberto">Aberto</option>
           <option value="pendente">Pendente</option>
           <option value="pago">Pago</option>
-        </select>
-        <select className="input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-          <option value="">Status (todos)</option>
-          <option value="ATIVO">Ativo</option>
-          <option value="INATIVO">Inativo</option>
         </select>
         <input className="input" placeholder="Data (filtro depois)" disabled />
         <button className="btn" onClick={() => load()} disabled={loading}>
@@ -292,7 +285,7 @@ export default function FaturaPage() {
           </label>
 
           <label>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>Pagamento</div>
+            <div style={{ fontSize: 12, opacity: 0.8 }}>Status</div>
             <select
               className="input"
               {...form.register('pagamento')}
@@ -303,9 +296,9 @@ export default function FaturaPage() {
                 }
               }}
             >
-              <option value="aberto">aberto</option>
-              <option value="pendente">pendente</option>
-              <option value="pago">pago</option>
+              <option value="aberto">Aberto</option>
+              <option value="pendente">Pendente</option>
+              <option value="pago">Pago</option>
             </select>
           </label>
 
@@ -319,13 +312,7 @@ export default function FaturaPage() {
             )}
           </label>
 
-          <label>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>Status</div>
-            <select className="input" {...form.register('status')}>
-              <option value="ATIVO">ATIVO</option>
-              <option value="INATIVO">INATIVO</option>
-            </select>
-          </label>
+          <input type="hidden" {...form.register('status')} />
 
           <label>
             <div style={{ fontSize: 12, opacity: 0.8 }}>Fase</div>
