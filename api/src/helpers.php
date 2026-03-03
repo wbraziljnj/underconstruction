@@ -168,3 +168,17 @@ function uuid_v4(): string
     $data[8] = chr((ord($data[8]) & 0x3f) | 0x80);
     return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
 }
+
+function slug_codigo(string $nome): string
+{
+    $s = trim($nome);
+    if (function_exists('iconv')) {
+        $converted = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $s);
+        if (is_string($converted) && $converted !== '') {
+            $s = $converted;
+        }
+    }
+    $s = strtolower($s);
+    $s = preg_replace('/[^a-z0-9]+/', '', $s) ?? '';
+    return $s;
+}

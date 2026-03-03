@@ -10,15 +10,14 @@ const schema = z.object({
   foto: z.string().optional(),
   nome: z.string().min(1, 'Nome obrigatório'),
   caderneta: z.string().optional(),
-  responsavel: z.string().optional(),
+  responsavel_id: z.string().optional(),
   rua: z.string().optional(),
   numero: z.string().optional(),
   bairro: z.string().optional(),
   cidade: z.string().optional(),
   cep: z.string().optional(),
   matricula: z.string().optional(),
-  engenheiro_responsavel: z.string().optional(),
-  data: z.string().optional(),
+  engenheiro_responsavel_id: z.string().optional(),
   data_inicio: z.string().optional(),
   data_previsao_finalizacao: z.string().optional(),
   notas: z.string().optional()
@@ -39,7 +38,6 @@ type Obra = {
   cep: string | null;
   matricula: string | null;
   engenheiroResponsavel: string | null;
-  data: string | null;
   dataInicio: string | null;
   dataPrevisaoFinalizacao: string | null;
   codigo: string;
@@ -72,21 +70,22 @@ export default function ObraPage() {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selectedPhotoFile, setSelectedPhotoFile] = useState<File | null>(null);
+  const [users, setUsers] = useState<{ userId: string; nome: string; tipoUsuario: string; status: string }[]>([]);
+  const [optionsError, setOptionsError] = useState<string | null>(null);
 
   const defaults = useMemo<FormValues>(
     () => ({
       foto: '',
       nome: '',
       caderneta: '',
-      responsavel: '',
+      responsavel_id: '',
       rua: '',
       numero: '',
       bairro: '',
       cidade: '',
       cep: '',
       matricula: '',
-      engenheiro_responsavel: '',
-      data: '',
+      engenheiro_responsavel_id: '',
       data_inicio: '',
       data_previsao_finalizacao: '',
       notas: ''
@@ -114,6 +113,31 @@ export default function ObraPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    (async () => {
+      try {
+        setOptionsError(null);
+        const u = await apiFetch<{ userId: string; nome: string; tipoUsuario: string; status: string }[]>(
+          '/cadastros/options',
+          { method: 'GET' }
+        );
+        if (!alive) return;
+        setUsers(u);
+      } catch (e) {
+        if (!alive) return;
+        setOptionsError(e instanceof Error ? e.message : 'Falha ao carregar usuários');
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [open]);
+
+  const owners = useMemo(() => users.filter((u) => u.tipoUsuario === 'Owner'), [users]);
+  const engenheiros = useMemo(() => users.filter((u) => u.tipoUsuario === 'Engenheiro'), [users]);
+
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <div className="card" style={{ padding: 12 }}>
@@ -132,15 +156,14 @@ export default function ObraPage() {
                     foto: obra.foto || '',
                     nome: obra.nome || '',
                     caderneta: obra.caderneta || '',
-                    responsavel: obra.responsavel || '',
+                    responsavel_id: '',
                     rua: obra.rua || '',
                     numero: obra.numero || '',
                     bairro: obra.bairro || '',
                     cidade: obra.cidade || '',
                     cep: obra.cep || '',
                     matricula: obra.matricula || '',
-                    engenheiro_responsavel: obra.engenheiroResponsavel || '',
-                    data: obra.data || '',
+                    engenheiro_responsavel_id: '',
                     data_inicio: obra.dataInicio || '',
                     data_previsao_finalizacao: obra.dataPrevisaoFinalizacao || '',
                     notas: obra.notas || ''
@@ -189,8 +212,6 @@ export default function ObraPage() {
             <div className="card" style={{ padding: 12 }}>
               <div style={{ fontSize: 12, opacity: 0.7 }}>Matrícula</div>
               <div>{obra.matricula || '-'}</div>
-              <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>Data</div>
-              <div>{obra.data || '-'}</div>
             </div>
             <div className="card" style={{ padding: 12, gridColumn: '1 / -1' }}>
               <div style={{ fontSize: 12, opacity: 0.7 }}>Notas</div>
@@ -241,6 +262,11 @@ export default function ObraPage() {
           </div>
         }
       >
+        {optionsError ? (
+          <div className="card" style={{ padding: 10, marginBottom: 10, borderColor: 'rgba(255,77,109,0.55)' }}>
+            <div style={{ color: 'var(--danger)', fontSize: 12 }}>{optionsError}</div>
+          </div>
+        ) : null}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
           <div style={{ gridColumn: '1 / -1' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
@@ -269,16 +295,30 @@ export default function ObraPage() {
 
           <label style={{ gridColumn: '1 / -1' }}>
             <div style={{ fontSize: 12, opacity: 0.8 }}>Caderneta</div>
-            <textarea className="input" {...form.register('caderneta')} />
+            <input className="input" {...form.register('caderneta')} />
           </label>
 
           <label>
             <div style={{ fontSize: 12, opacity: 0.8 }}>Responsável</div>
-            <input className="input" {...form.register('responsavel')} />
+            <select className="input" {...form.register('responsavel_id')} defaultValue="">
+              <option value="">Selecione (Owner)...</option>
+              {owners.map((u) => (
+                <option key={u.userId} value={u.userId}>
+                  {u.nome}
+                </option>
+              ))}
+            </select>
           </label>
           <label>
             <div style={{ fontSize: 12, opacity: 0.8 }}>Engenheiro responsável</div>
-            <input className="input" {...form.register('engenheiro_responsavel')} />
+            <select className="input" {...form.register('engenheiro_responsavel_id')} defaultValue="">
+              <option value="">Selecione (Engenheiro)...</option>
+              {engenheiros.map((u) => (
+                <option key={u.userId} value={u.userId}>
+                  {u.nome}
+                </option>
+              ))}
+            </select>
           </label>
 
           <label>
@@ -307,10 +347,6 @@ export default function ObraPage() {
           </label>
 
           <label>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>Data</div>
-            <input className="input" type="date" {...form.register('data')} />
-          </label>
-          <label>
             <div style={{ fontSize: 12, opacity: 0.8 }}>Data início</div>
             <input className="input" type="date" {...form.register('data_inicio')} />
           </label>
@@ -328,4 +364,3 @@ export default function ObraPage() {
     </div>
   );
 }
-

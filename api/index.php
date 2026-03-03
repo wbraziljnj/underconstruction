@@ -1109,7 +1109,6 @@ if ($relativePath === '/obra' && $method === 'GET') {
         'cep' => $row['cep'] !== null ? (string)$row['cep'] : null,
         'matricula' => $row['matricula'] !== null ? (string)$row['matricula'] : null,
         'engenheiroResponsavel' => $row['engenheiro_responsavel'] !== null ? (string)$row['engenheiro_responsavel'] : null,
-        'data' => $row['data'] !== null ? (string)$row['data'] : null,
         'dataInicio' => $row['data_inicio'] !== null ? (string)$row['data_inicio'] : null,
         'dataPrevisaoFinalizacao' => $row['data_previsao_finalizacao'] !== null ? (string)$row['data_previsao_finalizacao'] : null,
         'codigo' => (string)$row['codigo'],
@@ -1136,24 +1135,48 @@ if ($relativePath === '/obra' && $method === 'POST') {
     if ($nome === '') {
         fail_validation('nome', 'Nome é obrigatório');
     }
+    $slug = slug_codigo($nome);
+    if ($slug === '' || $slug !== $codigo) {
+        json_response(['detail' => 'O nome da obra deve gerar o mesmo código da obra ativa.'], 409);
+        exit;
+    }
 
     $foto = optional_string($payload['foto'] ?? null);
     $caderneta = optional_string($payload['caderneta'] ?? null);
-    $responsavel = optional_string($payload['responsavel'] ?? null);
+
+    $responsavel = null;
+    $responsavelIdRaw = optional_string($payload['responsavel_id'] ?? null);
+    if ($responsavelIdRaw !== null && ctype_digit($responsavelIdRaw)) {
+        $u = fetch_one('SELECT nome, tipo_usuario FROM uc_users WHERE user_id = ? AND code = ? LIMIT 1', [(int)$responsavelIdRaw, $codigo]);
+        if (!$u || (string)$u['tipo_usuario'] !== 'Owner') {
+            fail_validation('responsavel_id', 'Responsável deve ser um usuário Owner');
+        }
+        $responsavel = (string)$u['nome'];
+    }
+
     $rua = optional_string($payload['rua'] ?? null);
     $numero = optional_string($payload['numero'] ?? null);
     $bairro = optional_string($payload['bairro'] ?? null);
     $cidade = optional_string($payload['cidade'] ?? null);
     $cep = optional_string($payload['cep'] ?? null);
     $matricula = optional_string($payload['matricula'] ?? null);
-    $engResp = optional_string($payload['engenheiro_responsavel'] ?? ($payload['engenheiroResponsavel'] ?? null));
-    $data = parse_date_or_null($payload['data'] ?? null, 'data', false);
+
+    $engResp = null;
+    $engIdRaw = optional_string($payload['engenheiro_responsavel_id'] ?? null);
+    if ($engIdRaw !== null && ctype_digit($engIdRaw)) {
+        $u = fetch_one('SELECT nome, tipo_usuario FROM uc_users WHERE user_id = ? AND code = ? LIMIT 1', [(int)$engIdRaw, $codigo]);
+        if (!$u || (string)$u['tipo_usuario'] !== 'Engenheiro') {
+            fail_validation('engenheiro_responsavel_id', 'Engenheiro responsável deve ser um usuário Engenheiro');
+        }
+        $engResp = (string)$u['nome'];
+    }
+
     $dataInicio = parse_date_or_null($payload['data_inicio'] ?? ($payload['dataInicio'] ?? null), 'data_inicio', false);
     $dataPrev = parse_date_or_null($payload['data_previsao_finalizacao'] ?? ($payload['dataPrevisaoFinalizacao'] ?? null), 'data_previsao_finalizacao', false);
     $notas = optional_string($payload['notas'] ?? null);
 
     $pdo = Database::connection();
-    $stmt = $pdo->prepare('INSERT INTO uc_obra (foto, nome, caderneta, responsavel, rua, numero, bairro, cidade, cep, matricula, engenheiro_responsavel, data, data_inicio, data_previsao_finalizacao, codigo, notas) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    $stmt = $pdo->prepare('INSERT INTO uc_obra (foto, nome, caderneta, responsavel, rua, numero, bairro, cidade, cep, matricula, engenheiro_responsavel, data_inicio, data_previsao_finalizacao, codigo, notas) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
     $stmt->execute([
         $foto,
         $nome,
@@ -1166,7 +1189,6 @@ if ($relativePath === '/obra' && $method === 'POST') {
         $cep,
         $matricula,
         $engResp,
-        $data,
         $dataInicio,
         $dataPrev,
         $codigo,
@@ -1195,24 +1217,48 @@ if ($relativePath === '/obra' && $method === 'PUT') {
     if ($nome === '') {
         fail_validation('nome', 'Nome é obrigatório');
     }
+    $slug = slug_codigo($nome);
+    if ($slug === '' || $slug !== $codigo) {
+        json_response(['detail' => 'O nome da obra deve gerar o mesmo código da obra ativa.'], 409);
+        exit;
+    }
 
     $foto = optional_string($payload['foto'] ?? null);
     $caderneta = optional_string($payload['caderneta'] ?? null);
-    $responsavel = optional_string($payload['responsavel'] ?? null);
+
+    $responsavel = null;
+    $responsavelIdRaw = optional_string($payload['responsavel_id'] ?? null);
+    if ($responsavelIdRaw !== null && ctype_digit($responsavelIdRaw)) {
+        $u = fetch_one('SELECT nome, tipo_usuario FROM uc_users WHERE user_id = ? AND code = ? LIMIT 1', [(int)$responsavelIdRaw, $codigo]);
+        if (!$u || (string)$u['tipo_usuario'] !== 'Owner') {
+            fail_validation('responsavel_id', 'Responsável deve ser um usuário Owner');
+        }
+        $responsavel = (string)$u['nome'];
+    }
+
     $rua = optional_string($payload['rua'] ?? null);
     $numero = optional_string($payload['numero'] ?? null);
     $bairro = optional_string($payload['bairro'] ?? null);
     $cidade = optional_string($payload['cidade'] ?? null);
     $cep = optional_string($payload['cep'] ?? null);
     $matricula = optional_string($payload['matricula'] ?? null);
-    $engResp = optional_string($payload['engenheiro_responsavel'] ?? ($payload['engenheiroResponsavel'] ?? null));
-    $data = parse_date_or_null($payload['data'] ?? null, 'data', false);
+
+    $engResp = null;
+    $engIdRaw = optional_string($payload['engenheiro_responsavel_id'] ?? null);
+    if ($engIdRaw !== null && ctype_digit($engIdRaw)) {
+        $u = fetch_one('SELECT nome, tipo_usuario FROM uc_users WHERE user_id = ? AND code = ? LIMIT 1', [(int)$engIdRaw, $codigo]);
+        if (!$u || (string)$u['tipo_usuario'] !== 'Engenheiro') {
+            fail_validation('engenheiro_responsavel_id', 'Engenheiro responsável deve ser um usuário Engenheiro');
+        }
+        $engResp = (string)$u['nome'];
+    }
+
     $dataInicio = parse_date_or_null($payload['data_inicio'] ?? ($payload['dataInicio'] ?? null), 'data_inicio', false);
     $dataPrev = parse_date_or_null($payload['data_previsao_finalizacao'] ?? ($payload['dataPrevisaoFinalizacao'] ?? null), 'data_previsao_finalizacao', false);
     $notas = optional_string($payload['notas'] ?? null);
 
     $pdo = Database::connection();
-    $stmt = $pdo->prepare('UPDATE uc_obra SET foto = ?, nome = ?, caderneta = ?, responsavel = ?, rua = ?, numero = ?, bairro = ?, cidade = ?, cep = ?, matricula = ?, engenheiro_responsavel = ?, data = ?, data_inicio = ?, data_previsao_finalizacao = ?, notas = ? WHERE codigo = ?');
+    $stmt = $pdo->prepare('UPDATE uc_obra SET foto = ?, nome = ?, caderneta = ?, responsavel = ?, rua = ?, numero = ?, bairro = ?, cidade = ?, cep = ?, matricula = ?, engenheiro_responsavel = ?, data_inicio = ?, data_previsao_finalizacao = ?, notas = ? WHERE codigo = ?');
     $stmt->execute([
         $foto,
         $nome,
@@ -1225,7 +1271,6 @@ if ($relativePath === '/obra' && $method === 'PUT') {
         $cep,
         $matricula,
         $engResp,
-        $data,
         $dataInicio,
         $dataPrev,
         $notas,
