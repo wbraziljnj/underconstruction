@@ -111,7 +111,7 @@ export default function ObraPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user?.activeCode]);
 
   useEffect(() => {
     if (!open) return;
@@ -124,7 +124,8 @@ export default function ObraPage() {
           { method: 'GET' }
         );
         if (!alive) return;
-        setUsers(u);
+        // Na Obra, só faz sentido listar Owner/Engenheiro do código ativo.
+        setUsers((u || []).filter((x) => x.tipoUsuario === 'Owner' || x.tipoUsuario === 'Engenheiro'));
       } catch (e) {
         if (!alive) return;
         setOptionsError(e instanceof Error ? e.message : 'Falha ao carregar usuários');
@@ -133,7 +134,7 @@ export default function ObraPage() {
     return () => {
       alive = false;
     };
-  }, [open]);
+  }, [open, user?.activeCode]);
 
   const owners = useMemo(() => users.filter((u) => u.tipoUsuario === 'Owner'), [users]);
   const engenheiros = useMemo(() => users.filter((u) => u.tipoUsuario === 'Engenheiro'), [users]);

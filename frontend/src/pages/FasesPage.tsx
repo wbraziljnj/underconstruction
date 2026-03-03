@@ -118,7 +118,7 @@ export default function FasesPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user?.activeCode]);
 
   useEffect(() => {
     if (!open) return;
@@ -137,7 +137,7 @@ export default function FasesPage() {
     return () => {
       alive = false;
     };
-  }, [open]);
+  }, [open, user?.activeCode]);
 
   return (
     <div className="card" style={{ padding: 12 }}>

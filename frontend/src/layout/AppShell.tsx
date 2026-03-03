@@ -14,7 +14,7 @@ function getStoredCollapsed(): boolean {
 }
 
 export default function AppShell() {
-  const { user, logout } = useAuth();
+  const { user, logout, selectObra } = useAuth();
   const [collapsed, setCollapsed] = useState(getStoredCollapsed);
 
   useEffect(() => {
@@ -27,6 +27,29 @@ export default function AppShell() {
         <button className="btn" onClick={() => toggleTheme()} title="Tema">
           🌓
         </button>
+        {user?.codes?.length ? (
+          <select
+            className="input"
+            style={{ width: 160 }}
+            value={user.activeCode ?? ''}
+            onChange={async (e) => {
+              const codigo = e.target.value;
+              if (!codigo) return;
+              try {
+                await selectObra(codigo);
+              } catch (err) {
+                alert(err instanceof Error ? err.message : 'Falha ao selecionar obra');
+              }
+            }}
+            title="Obra ativa"
+          >
+            {user.codes.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        ) : null}
         <div style={{ display: 'grid', lineHeight: 1.1 }}>
           <div style={{ opacity: 0.9, fontSize: 12 }}>{user?.nome}</div>
           <div style={{ opacity: 0.7, fontSize: 12 }}>{user?.tipoUsuario || ''}</div>
@@ -36,7 +59,7 @@ export default function AppShell() {
         </button>
       </div>
     );
-  }, [logout, user?.nome]);
+  }, [logout, selectObra, user?.activeCode, user?.codes, user?.nome, user?.tipoUsuario]);
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 12, padding: 12 }}>

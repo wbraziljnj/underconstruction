@@ -12,6 +12,8 @@ const schema = z
     data: z.string().min(1, 'Data obrigatória'),
     lancamento: z.string().optional(),
     data_pagamento: z.string().optional(),
+    dados_pagamento: z.string().optional(),
+    nfe: z.string().optional(),
     status: z.enum(['ATIVO', 'INATIVO']),
     pagamento: z.enum(['aberto', 'pendente', 'pago']),
     valor: z.coerce.number().nonnegative('Valor inválido'),
@@ -115,6 +117,8 @@ export default function FaturaPage() {
       data: '',
       lancamento: new Date().toISOString().slice(0, 10),
       data_pagamento: '',
+      dados_pagamento: '',
+      nfe: '',
       status: 'ATIVO',
       pagamento: 'aberto',
       valor: 0,
@@ -155,7 +159,7 @@ export default function FaturaPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user?.activeCode]);
 
   useEffect(() => {
     if (!open) return;
@@ -178,7 +182,7 @@ export default function FaturaPage() {
     return () => {
       alive = false;
     };
-  }, [open]);
+  }, [open, user?.activeCode]);
 
   return (
     <div className="card" style={{ padding: 12 }}>
@@ -279,6 +283,8 @@ export default function FaturaPage() {
                           data: toDateOnlyLocal(r.data),
                           lancamento: toDateOnlyLocal(r.lancamento) || toDateOnlyLocal(new Date().toISOString()),
                           data_pagamento: toDateOnlyLocal(r.dataPagamento),
+                          dados_pagamento: r.dadosPagamento || '',
+                          nfe: r.nfe || '',
                           status: r.status || 'ATIVO',
                           pagamento: r.pagamento || 'aberto',
                           valor: Number(r.valor || 0),
@@ -413,6 +419,21 @@ export default function FaturaPage() {
                 {form.formState.errors.data_pagamento.message}
               </div>
             )}
+          </label>
+
+          <label style={{ gridColumn: '1 / -1' }}>
+            <div style={{ fontSize: 12, opacity: 0.8 }}>Dados pagamento</div>
+            <textarea
+              className="input"
+              rows={3}
+              placeholder="Ex: pix, banco, parcela, observações..."
+              {...form.register('dados_pagamento')}
+            />
+          </label>
+
+          <label style={{ gridColumn: '1 / -1' }}>
+            <div style={{ fontSize: 12, opacity: 0.8 }}>NF-e</div>
+            <input className="input" placeholder="Código de barras / linha digitável" {...form.register('nfe')} />
           </label>
 
           <input type="hidden" {...form.register('status')} />

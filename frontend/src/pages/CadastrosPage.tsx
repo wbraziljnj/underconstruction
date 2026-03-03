@@ -132,7 +132,7 @@ export default function CadastrosPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user?.activeCode]);
 
   return (
     <div className="card" style={{ padding: 12 }}>

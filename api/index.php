@@ -222,14 +222,20 @@ if ($relativePath === '/login' && $method === 'POST') {
     }
 
     $_SESSION['uc_user_id'] = (string)$user['user_id'];
-    $_SESSION['uc_code'] = (string)($user['code'] ?? '');
-    $_SESSION['uc_codigo'] = (string)($user['code'] ?? '');
+    $codes = parse_user_codes_from_db($user['code'] ?? '');
+    $_SESSION['uc_codes'] = $codes;
+    $active = $_SESSION['uc_active_code'] ?? null;
+    if (!is_string($active) || !in_array($active, $codes, true)) {
+        $_SESSION['uc_active_code'] = $codes[0] ?? null;
+    }
 
     json_response([
         'userId' => (string)$user['user_id'],
         'nome' => (string)$user['nome'],
         'email' => (string)$user['email'],
         'tipoUsuario' => (string)$user['tipo_usuario'],
+        'codes' => $codes,
+        'activeCode' => $_SESSION['uc_active_code'] ?? null,
     ]);
     exit;
 }
@@ -246,13 +252,19 @@ if ($relativePath === '/me' && $method === 'GET') {
         json_response(null);
         exit;
     }
-    $_SESSION['uc_code'] = (string)($user['code'] ?? '');
-    $_SESSION['uc_codigo'] = (string)($user['code'] ?? '');
+    $codes = parse_user_codes_from_db($user['code'] ?? '');
+    $_SESSION['uc_codes'] = $codes;
+    $active = $_SESSION['uc_active_code'] ?? null;
+    if (!is_string($active) || !in_array($active, $codes, true)) {
+        $_SESSION['uc_active_code'] = $codes[0] ?? null;
+    }
     json_response([
         'userId' => (string)$user['user_id'],
         'nome' => (string)$user['nome'],
         'email' => (string)$user['email'],
         'tipoUsuario' => (string)$user['tipo_usuario'],
+        'codes' => $codes,
+        'activeCode' => $_SESSION['uc_active_code'] ?? null,
     ]);
     exit;
 }
@@ -266,12 +278,52 @@ if ($relativePath === '/logout' && $method === 'POST') {
     exit;
 }
 
+if ($relativePath === '/obras' && $method === 'GET') {
+    require_authenticated_user_id();
+    $codes = get_user_obras_codes();
+    $activeCode = get_active_obra_codigo();
+
+    $obras = [];
+    if ($codes !== []) {
+        $placeholders = implode(',', array_fill(0, count($codes), '?'));
+        $rows = fetch_all(
+            "SELECT obra_id, foto, nome, codigo FROM uc_obra WHERE codigo IN ($placeholders) ORDER BY nome ASC",
+            $codes
+        );
+        $obras = array_map(fn ($r) => [
+            'obraId' => (int)$r['obra_id'],
+            'nome' => (string)$r['nome'],
+            'codigo' => (string)$r['codigo'],
+            'foto' => $r['foto'] !== null ? (string)$r['foto'] : null,
+        ], $rows);
+    }
+
+    json_response([
+        'codes' => $codes,
+        'activeCode' => $activeCode,
+        'obras' => $obras,
+    ]);
+    exit;
+}
+
+if ($relativePath === '/obras/select' && $method === 'POST') {
+    require_authenticated_user_id();
+    $body = parse_json_body();
+    $codigo = is_string($body['codigo'] ?? null) ? trim((string)$body['codigo']) : '';
+    if ($codigo === '') {
+        fail_validation('codigo', 'codigo é obrigatório');
+    }
+    require_user_has_codigo($codigo);
+    $_SESSION['uc_active_code'] = $codigo;
+    json_response(['activeCode' => $codigo]);
+    exit;
+}
+
 if ($relativePath === '/cadastros/options' && $method === 'GET') {
     require_authenticated_user_id();
-    $codigo = require_active_obra_codigo();
-    $code = trim((string)($_SESSION['uc_code'] ?? $codigo));
+    $code = require_active_obra_codigo();
     $rows = fetch_all(
-        'SELECT user_id, nome, tipo_usuario, status FROM uc_users WHERE code = ? ORDER BY nome ASC',
+        'SELECT user_id, nome, tipo_usuario, status FROM uc_users WHERE JSON_CONTAINS(code, JSON_QUOTE(?)) ORDER BY nome ASC',
         [$code]
     );
     $options = array_map(fn ($r) => [
@@ -286,8 +338,7 @@ if ($relativePath === '/cadastros/options' && $method === 'GET') {
 
 if ($relativePath === '/fases/options' && $method === 'GET') {
     require_authenticated_user_id();
-    $codigo = require_active_obra_codigo();
-    $code = trim((string)($_SESSION['uc_code'] ?? $codigo));
+    $code = require_active_obra_codigo();
     $rows = fetch_all(
         'SELECT fase_id, fase, data_inicio, previsao_finalizacao, data_finalizacao, status FROM uc_fases WHERE code = ? ORDER BY data_inicio ASC',
         [$code]
@@ -306,15 +357,14 @@ if ($relativePath === '/fases/options' && $method === 'GET') {
 
 if ($relativePath === '/cadastros' && $method === 'GET') {
     require_authenticated_user_id();
-    $codigo = require_active_obra_codigo();
-    $code = trim((string)($_SESSION['uc_code'] ?? $codigo));
+    $code = require_active_obra_codigo();
 
     $q = trim((string)($_GET['q'] ?? ''));
     $tipo = trim((string)($_GET['tipo_usuario'] ?? ''));
     $status = trim((string)($_GET['status'] ?? ''));
 
     $sql = 'SELECT user_id, foto, tipo_usuario, nome, cpf_cnpj, telefone, endereco, email, notas, status, created_at, updated_at
-            FROM uc_users WHERE code = ?';
+            FROM uc_users WHERE JSON_CONTAINS(code, JSON_QUOTE(?))';
     $params = [$code];
 
     if ($q !== '') {
@@ -355,8 +405,7 @@ if ($relativePath === '/cadastros' && $method === 'GET') {
 
 if ($relativePath === '/fases' && $method === 'GET') {
     require_authenticated_user_id();
-    $codigo = require_active_obra_codigo();
-    $code = trim((string)($_SESSION['uc_code'] ?? $codigo));
+    $code = require_active_obra_codigo();
 
     $q = trim((string)($_GET['q'] ?? ''));
 
@@ -364,9 +413,9 @@ if ($relativePath === '/fases' && $method === 'GET') {
                    f.status, f.valor_total, f.valor_parcial, f.notas, f.created_at, f.updated_at,
                    u.nome AS responsavel_nome
             FROM uc_fases f
-            LEFT JOIN uc_users u ON u.user_id = f.responsavel_id
+            LEFT JOIN uc_users u ON u.user_id = f.responsavel_id AND JSON_CONTAINS(u.code, JSON_QUOTE(?))
             WHERE f.code = ?';
-    $params = [$code];
+    $params = [$code, $code];
 
     if ($q !== '') {
         $sql .= ' AND (LOWER(f.fase) LIKE ? OR LOWER(u.nome) LIKE ?)';
@@ -398,14 +447,13 @@ if ($relativePath === '/fases' && $method === 'GET') {
 
 if ($relativePath === '/faturas' && $method === 'GET') {
     require_authenticated_user_id();
-    $codigo = require_active_obra_codigo();
-    $code = trim((string)($_SESSION['uc_code'] ?? $codigo));
+    $code = require_active_obra_codigo();
 
     $q = trim((string)($_GET['q'] ?? ''));
     $pagamento = trim((string)($_GET['pagamento'] ?? ''));
     $status = trim((string)($_GET['status'] ?? ''));
 
-    $sql = 'SELECT ft.fatura_id, ft.data, ft.lancamento, ft.data_pagamento, ft.status, ft.pagamento,
+    $sql = 'SELECT ft.fatura_id, ft.data, ft.lancamento, ft.data_pagamento, ft.dados_pagamento, ft.nfe, ft.status, ft.pagamento,
                    ft.valor, ft.quantidade, ft.descricao, ft.total, ft.fase_id, ft.responsavel_id, ft.empresa_id,
                    ft.created_at, ft.updated_at,
                    f.fase AS fase_nome,
@@ -413,10 +461,10 @@ if ($relativePath === '/faturas' && $method === 'GET') {
                    ue.nome AS empresa_nome
             FROM uc_faturas ft
             LEFT JOIN uc_fases f ON f.fase_id = ft.fase_id
-            LEFT JOIN uc_users ur ON ur.user_id = ft.responsavel_id
-            LEFT JOIN uc_users ue ON ue.user_id = ft.empresa_id
+            LEFT JOIN uc_users ur ON ur.user_id = ft.responsavel_id AND JSON_CONTAINS(ur.code, JSON_QUOTE(?))
+            LEFT JOIN uc_users ue ON ue.user_id = ft.empresa_id AND JSON_CONTAINS(ue.code, JSON_QUOTE(?))
             WHERE ft.code = ?';
-    $params = [$code];
+    $params = [$code, $code, $code];
 
     if ($q !== '') {
         $sql .= ' AND (LOWER(ft.descricao) LIKE ? OR LOWER(f.fase) LIKE ? OR LOWER(ur.nome) LIKE ? OR LOWER(ue.nome) LIKE ?)';
@@ -443,6 +491,8 @@ if ($relativePath === '/faturas' && $method === 'GET') {
         'data' => (string)$r['data'],
         'lancamento' => (string)$r['lancamento'],
         'dataPagamento' => $r['data_pagamento'] !== null ? (string)$r['data_pagamento'] : null,
+        'dadosPagamento' => $r['dados_pagamento'] !== null ? (string)$r['dados_pagamento'] : null,
+        'nfe' => $r['nfe'] !== null ? (string)$r['nfe'] : null,
         'status' => (string)$r['status'],
         'pagamento' => (string)$r['pagamento'],
         'valor' => (string)$r['valor'],
@@ -475,7 +525,10 @@ if ($relativePath === '/cadastros' && $method === 'POST') {
         fail_validation('tipo_usuario', 'Tipo de usuário inválido');
     }
     if ($tipoUsuario === 'Owner') {
-        $existingOwner = fetch_one('SELECT user_id FROM uc_users WHERE code = ? AND tipo_usuario = ? LIMIT 1', [$code, 'Owner']);
+        $existingOwner = fetch_one(
+            'SELECT user_id FROM uc_users WHERE JSON_CONTAINS(code, JSON_QUOTE(?)) AND tipo_usuario = ? LIMIT 1',
+            [$code, 'Owner']
+        );
         if ($existingOwner) {
             json_response(['detail' => 'Já existe um Owner para este código.'], 409);
             exit;
@@ -515,9 +568,9 @@ if ($relativePath === '/cadastros' && $method === 'POST') {
 
     $pdo = Database::connection();
     try {
-        $stmt = $pdo->prepare('INSERT INTO uc_users (code, foto, tipo_usuario, nome, cpf_cnpj, telefone, endereco, email, notas, status, password_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        $stmt = $pdo->prepare('INSERT INTO uc_users (code, foto, tipo_usuario, nome, cpf_cnpj, telefone, endereco, email, notas, status, password_hash) VALUES (CAST(? AS JSON), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         $stmt->execute([
-            $code,
+            json_encode([$code], JSON_UNESCAPED_UNICODE),
             $foto,
             $tipoUsuario,
             $nome,
@@ -563,7 +616,10 @@ if (preg_match('#^/cadastros/([^/]+)$#', $relativePath, $m) && $method === 'PUT'
         exit;
     }
 
-    $existing = fetch_one('SELECT * FROM uc_users WHERE user_id = ? AND code = ? LIMIT 1', [$userId, $code]);
+    $existing = fetch_one(
+        'SELECT * FROM uc_users WHERE user_id = ? AND JSON_CONTAINS(code, JSON_QUOTE(?)) LIMIT 1',
+        [$userId, $code]
+    );
     if (!$existing) {
         json_response(['detail' => 'Usuário não encontrado.'], 404);
         exit;
@@ -578,7 +634,7 @@ if (preg_match('#^/cadastros/([^/]+)$#', $relativePath, $m) && $method === 'PUT'
     }
     if ($tipoUsuario === 'Owner') {
         $existingOwner = fetch_one(
-            'SELECT user_id FROM uc_users WHERE code = ? AND tipo_usuario = ? AND user_id != ? LIMIT 1',
+            'SELECT user_id FROM uc_users WHERE JSON_CONTAINS(code, JSON_QUOTE(?)) AND tipo_usuario = ? AND user_id != ? LIMIT 1',
             [$code, 'Owner', (int)$userId]
         );
         if ($existingOwner) {
@@ -638,7 +694,7 @@ if (preg_match('#^/cadastros/([^/]+)$#', $relativePath, $m) && $method === 'PUT'
             $sql .= ', password_hash = ?';
             $params[] = password_hash('UnderConstruction', PASSWORD_DEFAULT);
         }
-        $sql .= ' WHERE user_id = ? AND code = ?';
+        $sql .= ' WHERE user_id = ? AND JSON_CONTAINS(code, JSON_QUOTE(?))';
         $params[] = $userId;
         $params[] = $code;
 
@@ -652,7 +708,10 @@ if (preg_match('#^/cadastros/([^/]+)$#', $relativePath, $m) && $method === 'PUT'
         throw $e;
     }
 
-    $row = fetch_one('SELECT user_id, foto, tipo_usuario, nome, cpf_cnpj, telefone, endereco, email, notas, status, created_at, updated_at FROM uc_users WHERE user_id = ? AND code = ? LIMIT 1', [$userId, $code]);
+    $row = fetch_one(
+        'SELECT user_id, foto, tipo_usuario, nome, cpf_cnpj, telefone, endereco, email, notas, status, created_at, updated_at FROM uc_users WHERE user_id = ? AND JSON_CONTAINS(code, JSON_QUOTE(?)) LIMIT 1',
+        [$userId, $code]
+    );
     json_response([
         'userId' => (string)$row['user_id'],
         'foto' => $row['foto'] !== null ? (string)$row['foto'] : null,
@@ -685,14 +744,17 @@ if (preg_match('#^/cadastros/(\\d+)$#', $relativePath, $m) && $method === 'DELET
     }
     verify_current_user_password($password);
 
-    $row = fetch_one('SELECT user_id FROM uc_users WHERE user_id = ? AND code = ? LIMIT 1', [$targetId, $code]);
+    $row = fetch_one(
+        'SELECT user_id FROM uc_users WHERE user_id = ? AND JSON_CONTAINS(code, JSON_QUOTE(?)) LIMIT 1',
+        [$targetId, $code]
+    );
     if (!$row) {
         json_response(['detail' => 'Usuário não encontrado.'], 404);
         exit;
     }
 
     $pdo = Database::connection();
-    $stmt = $pdo->prepare('DELETE FROM uc_users WHERE user_id = ? AND code = ?');
+    $stmt = $pdo->prepare('DELETE FROM uc_users WHERE user_id = ? AND JSON_CONTAINS(code, JSON_QUOTE(?))');
     $stmt->execute([$targetId, $code]);
     http_response_code(204);
     exit;
@@ -930,15 +992,19 @@ if ($relativePath === '/faturas' && $method === 'POST') {
     } else {
         $dataPagamento = null;
     }
+    $dadosPagamento = optional_string($payload['dados_pagamento'] ?? ($payload['dadosPagamento'] ?? null));
+    $nfe = optional_string($payload['nfe'] ?? null);
 
     $pdo = Database::connection();
-    $stmt = $pdo->prepare('INSERT INTO uc_faturas (code, descricao, data, lancamento, data_pagamento, status, pagamento, valor, quantidade, total, fase_id, responsavel_id, empresa_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    $stmt = $pdo->prepare('INSERT INTO uc_faturas (code, descricao, data, lancamento, data_pagamento, dados_pagamento, nfe, status, pagamento, valor, quantidade, total, fase_id, responsavel_id, empresa_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
     $stmt->execute([
         $code,
         $descricao,
         $data,
         $lancamento,
         $dataPagamento,
+        $dadosPagamento,
+        $nfe,
         $status,
         $pagamento,
         $valor,
@@ -1023,13 +1089,17 @@ if (preg_match('#^/faturas/(\\d+)$#', $relativePath, $m) && $method === 'PUT') {
     } else {
         $dataPagamento = null;
     }
+    $dadosPagamento = optional_string($payload['dados_pagamento'] ?? ($payload['dadosPagamento'] ?? null));
+    $nfe = optional_string($payload['nfe'] ?? null);
 
     $pdo = Database::connection();
-    $stmt = $pdo->prepare('UPDATE uc_faturas SET descricao = ?, data = ?, data_pagamento = ?, status = ?, pagamento = ?, valor = ?, quantidade = ?, total = ?, fase_id = ?, responsavel_id = ?, empresa_id = ? WHERE fatura_id = ? AND code = ?');
+    $stmt = $pdo->prepare('UPDATE uc_faturas SET descricao = ?, data = ?, data_pagamento = ?, dados_pagamento = ?, nfe = ?, status = ?, pagamento = ?, valor = ?, quantidade = ?, total = ?, fase_id = ?, responsavel_id = ?, empresa_id = ? WHERE fatura_id = ? AND code = ?');
     $stmt->execute([
         $descricao,
         $data,
         $dataPagamento,
+        $dadosPagamento,
+        $nfe,
         $status,
         $pagamento,
         $valor,
@@ -1043,7 +1113,7 @@ if (preg_match('#^/faturas/(\\d+)$#', $relativePath, $m) && $method === 'PUT') {
     ]);
 
     $row = fetch_one(
-        'SELECT ft.fatura_id, ft.data, ft.lancamento, ft.data_pagamento, ft.status, ft.pagamento,
+        'SELECT ft.fatura_id, ft.data, ft.lancamento, ft.data_pagamento, ft.dados_pagamento, ft.nfe, ft.status, ft.pagamento,
                 ft.valor, ft.quantidade, ft.descricao, ft.total, ft.fase_id, ft.responsavel_id, ft.empresa_id,
                 ft.created_at, ft.updated_at,
                 f.fase AS fase_nome,
@@ -1051,10 +1121,10 @@ if (preg_match('#^/faturas/(\\d+)$#', $relativePath, $m) && $method === 'PUT') {
                 ue.nome AS empresa_nome
          FROM uc_faturas ft
          LEFT JOIN uc_fases f ON f.fase_id = ft.fase_id
-         LEFT JOIN uc_users ur ON ur.user_id = ft.responsavel_id
-         LEFT JOIN uc_users ue ON ue.user_id = ft.empresa_id
+         LEFT JOIN uc_users ur ON ur.user_id = ft.responsavel_id AND JSON_CONTAINS(ur.code, JSON_QUOTE(?))
+         LEFT JOIN uc_users ue ON ue.user_id = ft.empresa_id AND JSON_CONTAINS(ue.code, JSON_QUOTE(?))
          WHERE ft.fatura_id = ? AND ft.code = ? LIMIT 1',
-        [$faturaId, $code]
+        [$code, $code, $faturaId, $code]
     );
     json_response([
         'faturaId' => (int)$row['fatura_id'],
@@ -1062,6 +1132,8 @@ if (preg_match('#^/faturas/(\\d+)$#', $relativePath, $m) && $method === 'PUT') {
         'data' => (string)$row['data'],
         'lancamento' => (string)$row['lancamento'],
         'dataPagamento' => $row['data_pagamento'] !== null ? (string)$row['data_pagamento'] : null,
+        'dadosPagamento' => $row['dados_pagamento'] !== null ? (string)$row['dados_pagamento'] : null,
+        'nfe' => $row['nfe'] !== null ? (string)$row['nfe'] : null,
         'status' => (string)$row['status'],
         'pagamento' => (string)$row['pagamento'],
         'valor' => (string)$row['valor'],
@@ -1166,7 +1238,10 @@ if ($relativePath === '/obra' && $method === 'POST') {
     $responsavel = null;
     $responsavelIdRaw = optional_string($payload['responsavel_id'] ?? null);
     if ($responsavelIdRaw !== null && ctype_digit($responsavelIdRaw)) {
-        $u = fetch_one('SELECT nome, tipo_usuario FROM uc_users WHERE user_id = ? AND code = ? LIMIT 1', [(int)$responsavelIdRaw, $codigo]);
+        $u = fetch_one(
+            'SELECT nome, tipo_usuario FROM uc_users WHERE user_id = ? AND JSON_CONTAINS(code, JSON_QUOTE(?)) LIMIT 1',
+            [(int)$responsavelIdRaw, $codigo]
+        );
         if (!$u || (string)$u['tipo_usuario'] !== 'Owner') {
             fail_validation('responsavel_id', 'Responsável deve ser um usuário Owner');
         }
@@ -1183,7 +1258,10 @@ if ($relativePath === '/obra' && $method === 'POST') {
     $engResp = null;
     $engIdRaw = optional_string($payload['engenheiro_responsavel_id'] ?? null);
     if ($engIdRaw !== null && ctype_digit($engIdRaw)) {
-        $u = fetch_one('SELECT nome, tipo_usuario FROM uc_users WHERE user_id = ? AND code = ? LIMIT 1', [(int)$engIdRaw, $codigo]);
+        $u = fetch_one(
+            'SELECT nome, tipo_usuario FROM uc_users WHERE user_id = ? AND JSON_CONTAINS(code, JSON_QUOTE(?)) LIMIT 1',
+            [(int)$engIdRaw, $codigo]
+        );
         if (!$u || (string)$u['tipo_usuario'] !== 'Engenheiro') {
             fail_validation('engenheiro_responsavel_id', 'Engenheiro responsável deve ser um usuário Engenheiro');
         }
@@ -1248,7 +1326,10 @@ if ($relativePath === '/obra' && $method === 'PUT') {
     $responsavel = null;
     $responsavelIdRaw = optional_string($payload['responsavel_id'] ?? null);
     if ($responsavelIdRaw !== null && ctype_digit($responsavelIdRaw)) {
-        $u = fetch_one('SELECT nome, tipo_usuario FROM uc_users WHERE user_id = ? AND code = ? LIMIT 1', [(int)$responsavelIdRaw, $codigo]);
+        $u = fetch_one(
+            'SELECT nome, tipo_usuario FROM uc_users WHERE user_id = ? AND JSON_CONTAINS(code, JSON_QUOTE(?)) LIMIT 1',
+            [(int)$responsavelIdRaw, $codigo]
+        );
         if (!$u || (string)$u['tipo_usuario'] !== 'Owner') {
             fail_validation('responsavel_id', 'Responsável deve ser um usuário Owner');
         }
@@ -1265,7 +1346,10 @@ if ($relativePath === '/obra' && $method === 'PUT') {
     $engResp = null;
     $engIdRaw = optional_string($payload['engenheiro_responsavel_id'] ?? null);
     if ($engIdRaw !== null && ctype_digit($engIdRaw)) {
-        $u = fetch_one('SELECT nome, tipo_usuario FROM uc_users WHERE user_id = ? AND code = ? LIMIT 1', [(int)$engIdRaw, $codigo]);
+        $u = fetch_one(
+            'SELECT nome, tipo_usuario FROM uc_users WHERE user_id = ? AND JSON_CONTAINS(code, JSON_QUOTE(?)) LIMIT 1',
+            [(int)$engIdRaw, $codigo]
+        );
         if (!$u || (string)$u['tipo_usuario'] !== 'Engenheiro') {
             fail_validation('engenheiro_responsavel_id', 'Engenheiro responsável deve ser um usuário Engenheiro');
         }

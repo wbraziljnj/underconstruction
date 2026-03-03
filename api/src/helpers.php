@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use DateTimeImmutable;
 use UC\Database;
 
 function json_response(mixed $data, int $code = 200): void
@@ -65,12 +64,20 @@ function require_authenticated_user_id(): string
 function get_active_obra_codigo(): ?string
 {
     start_session_if_needed();
-    $codigo = $_SESSION['uc_code'] ?? ($_SESSION['uc_codigo'] ?? null);
-    if (!is_string($codigo)) {
+    $codigo = $_SESSION['uc_active_code'] ?? null;
+    if (is_string($codigo)) {
+        $codigo = trim($codigo);
+        if ($codigo !== '') {
+            return $codigo;
+        }
+    }
+
+    $codes = get_user_obras_codes();
+    if ($codes === []) {
         return null;
     }
-    $codigo = trim($codigo);
-    return $codigo === '' ? null : $codigo;
+    // fallback: primeira obra do usuário
+    return $codes[0] ?? null;
 }
 
 function require_active_obra_codigo(): string
@@ -80,7 +87,75 @@ function require_active_obra_codigo(): string
         json_response(['error' => 'Nenhuma obra selecionada.'], 409);
         exit;
     }
+    // Se houver lista de obras no contexto do usuário, valida acesso.
+    $codes = get_user_obras_codes();
+    if ($codes !== [] && !in_array($codigo, $codes, true)) {
+        json_response(['detail' => 'Você não tem acesso a esta obra.'], 403);
+        exit;
+    }
     return $codigo;
+}
+
+/**
+ * @return string[]
+ */
+function get_user_obras_codes(): array
+{
+    start_session_if_needed();
+    $codes = $_SESSION['uc_codes'] ?? null;
+    if (is_array($codes)) {
+        $out = [];
+        foreach ($codes as $c) {
+            if (is_string($c)) {
+                $c = trim($c);
+                if ($c !== '') {
+                    $out[] = $c;
+                }
+            }
+        }
+        return array_values(array_unique($out));
+    }
+    return [];
+}
+
+/**
+ * Aceita string JSON (ex: '["a","b"]') ou string simples (compat) e normaliza para array de strings.
+ *
+ * @return string[]
+ */
+function parse_user_codes_from_db(mixed $dbValue): array
+{
+    if (!is_string($dbValue)) {
+        return [];
+    }
+    $raw = trim($dbValue);
+    if ($raw === '') {
+        return [];
+    }
+    $decoded = json_decode($raw, true);
+    if (is_array($decoded)) {
+        $out = [];
+        foreach ($decoded as $c) {
+            if (is_string($c)) {
+                $c = trim($c);
+                if ($c !== '') {
+                    $out[] = $c;
+                }
+            }
+        }
+        return array_values(array_unique($out));
+    }
+    // Compat: valor antigo varchar
+    return [$raw];
+}
+
+function require_user_has_codigo(string $codigo): void
+{
+    $codes = get_user_obras_codes();
+    if (!in_array($codigo, $codes, true)) {
+        json_response(['detail' => 'Você não tem acesso a esta obra.'], 403);
+        exit;
+    }
 }
 
 function now_datetime_ms(): string
