@@ -3,6 +3,8 @@ import Modal from '../ui/Modal';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { apiFetch } from '../api/client';
+import { useEffect } from 'react';
 
 const schema = z
   .object({
@@ -13,12 +15,11 @@ const schema = z
     pagamento: z.enum(['aberto', 'pendente', 'pago']),
     valor: z.coerce.number().nonnegative('Valor inválido'),
     quantidade: z.coerce.number().int('Quantidade inválida').nonnegative('Quantidade inválida'),
-    descricao: z.string().min(1, 'Descrição obrigatória'),
+    descricao: z.string().min(1, 'Fatura obrigatória'),
     total: z.coerce.number().nonnegative('Total inválido'),
     fase_id: z.string().min(1, 'Fase ID obrigatório'),
     responsavel_id: z.string().optional(),
     empresa_id: z.string().optional(),
-    code: z.string().min(1, 'Code (obra) obrigatório')
   })
   .superRefine((v, ctx) => {
     if (v.pagamento === 'pago' && (!v.data_pagamento || v.data_pagamento.trim() === '')) {
@@ -32,6 +33,9 @@ const schema = z
 
 type FormValues = z.infer<typeof schema>;
 
+type UserOption = { userId: string; nome: string; tipoUsuario: string; status: string };
+type FaseOption = { faseId: string; fase: string };
+
 function nowLocalDatetime() {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -42,6 +46,9 @@ function nowLocalDatetime() {
 
 export default function FaturaPage() {
   const [open, setOpen] = useState(false);
+  const [users, setUsers] = useState<UserOption[]>([]);
+  const [fases, setFases] = useState<FaseOption[]>([]);
+  const [optionsError, setOptionsError] = useState<string | null>(null);
 
   const defaults = useMemo<FormValues>(
     () => ({
@@ -57,7 +64,6 @@ export default function FaturaPage() {
       fase_id: '',
       responsavel_id: '',
       empresa_id: '',
-      code: ''
     }),
     []
   );
@@ -69,6 +75,29 @@ export default function FaturaPage() {
 
   const valor = form.watch('valor');
   const quantidade = form.watch('quantidade');
+
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    (async () => {
+      try {
+        setOptionsError(null);
+        const [u, f] = await Promise.all([
+          apiFetch<UserOption[]>('/cadastros/options', { method: 'GET' }),
+          apiFetch<FaseOption[]>('/fases/options', { method: 'GET' })
+        ]);
+        if (!alive) return;
+        setUsers(u);
+        setFases(f);
+      } catch (e) {
+        if (!alive) return;
+        setOptionsError(e instanceof Error ? e.message : 'Falha ao carregar options');
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [open]);
 
   return (
     <div className="card" style={{ padding: 12 }}>
@@ -159,10 +188,23 @@ export default function FaturaPage() {
           </div>
         }
       >
+        {optionsError ? (
+          <div className="card" style={{ padding: 10, marginBottom: 10, borderColor: 'rgba(255,77,109,0.55)' }}>
+            <div style={{ color: 'var(--danger)', fontSize: 12 }}>{optionsError}</div>
+          </div>
+        ) : null}
         <form
           onSubmit={(e) => e.preventDefault()}
           style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}
         >
+          <label style={{ gridColumn: '1 / -1' }}>
+            <div style={{ fontSize: 12, opacity: 0.8 }}>Fatura</div>
+            <input className="input" {...form.register('descricao')} placeholder="Nome da fatura" />
+            {form.formState.errors.descricao && (
+              <div style={{ color: 'var(--danger)', fontSize: 12 }}>{form.formState.errors.descricao.message}</div>
+            )}
+          </label>
+
           <label>
             <div style={{ fontSize: 12, opacity: 0.8 }}>Data (datetime)</div>
             <input className="input" type="datetime-local" {...form.register('data')} />
@@ -213,21 +255,42 @@ export default function FaturaPage() {
           </label>
 
           <label>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>Fase ID (char(36))</div>
-            <input className="input" {...form.register('fase_id')} />
+            <div style={{ fontSize: 12, opacity: 0.8 }}>Fase</div>
+            <select className="input" {...form.register('fase_id')} defaultValue="">
+              <option value="">Selecione...</option>
+              {fases.map((f) => (
+                <option key={f.faseId} value={f.faseId}>
+                  {f.fase}
+                </option>
+              ))}
+            </select>
             {form.formState.errors.fase_id && (
               <div style={{ color: 'var(--danger)', fontSize: 12 }}>{form.formState.errors.fase_id.message}</div>
             )}
           </label>
 
           <label>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>Responsável ID (char(36))</div>
-            <input className="input" {...form.register('responsavel_id')} placeholder="(opcional)" />
+            <div style={{ fontSize: 12, opacity: 0.8 }}>Responsável</div>
+            <select className="input" {...form.register('responsavel_id')} defaultValue="">
+              <option value="">(opcional)</option>
+              {users.map((u) => (
+                <option key={u.userId} value={u.userId}>
+                  {u.nome}
+                </option>
+              ))}
+            </select>
           </label>
 
           <label>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>Empresa ID (char(36))</div>
-            <input className="input" {...form.register('empresa_id')} placeholder="(opcional)" />
+            <div style={{ fontSize: 12, opacity: 0.8 }}>Empresa</div>
+            <select className="input" {...form.register('empresa_id')} defaultValue="">
+              <option value="">(opcional)</option>
+              {users.map((u) => (
+                <option key={u.userId} value={u.userId}>
+                  {u.nome}
+                </option>
+              ))}
+            </select>
           </label>
 
           <label>
@@ -267,35 +330,19 @@ export default function FaturaPage() {
             )}
           </label>
 
-          <label style={{ gridColumn: '1 / -1' }}>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>Descrição (text)</div>
-            <textarea className="input" {...form.register('descricao')} />
-            {form.formState.errors.descricao && (
-              <div style={{ color: 'var(--danger)', fontSize: 12 }}>{form.formState.errors.descricao.message}</div>
-            )}
-          </label>
-
           <label>
             <div style={{ fontSize: 12, opacity: 0.8 }}>Total (auto)</div>
             <input className="input" type="number" step="0.01" disabled value={Number(form.watch('total') || 0)} />
           </label>
 
-          <label>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>Code (obra)</div>
-            <input className="input" {...form.register('code')} placeholder="Ex: minhacasa" />
-            {form.formState.errors.code && (
-              <div style={{ color: 'var(--danger)', fontSize: 12 }}>{form.formState.errors.code.message}</div>
-            )}
-          </label>
-
-          <label>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>created_at</div>
-            <input className="input" disabled value="(auto)" />
-          </label>
-          <label>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>updated_at</div>
-            <input className="input" disabled value="(auto)" />
-          </label>
+          <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 12, opacity: 0.75, fontSize: 12 }}>
+            <div>
+              <b>created_at:</b> —
+            </div>
+            <div>
+              <b>updated_at:</b> —
+            </div>
+          </div>
         </form>
       </Modal>
     </div>

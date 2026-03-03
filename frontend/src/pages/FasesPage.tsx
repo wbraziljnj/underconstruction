@@ -14,8 +14,7 @@ const schema = z
     responsavel_id: z.string().optional(),
     valor_total: z.coerce.number().nonnegative('Valor total inválido'),
     valor_parcial: z.coerce.number().nonnegative('Valor parcial inválido'),
-    notas: z.string().optional(),
-    code: z.string().min(1, 'Code (obra) obrigatório')
+    notas: z.string().optional()
   })
   .refine((v) => v.valor_parcial <= v.valor_total, {
     message: 'Valor parcial não pode ser maior que o valor total',
@@ -43,8 +42,7 @@ export default function FasesPage() {
       responsavel_id: '',
       valor_total: 0,
       valor_parcial: 0,
-      notas: '',
-      code: ''
+      notas: ''
     }),
     []
   );
@@ -215,22 +213,14 @@ export default function FasesPage() {
             <textarea className="input" {...form.register('notas')} />
           </label>
 
-          <label style={{ gridColumn: '1 / -1' }}>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>Code (obra)</div>
-            <input className="input" {...form.register('code')} placeholder="Ex: minhacasa" />
-            {form.formState.errors.code && (
-              <div style={{ color: 'var(--danger)', fontSize: 12 }}>{form.formState.errors.code.message}</div>
-            )}
-          </label>
-
-          <label>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>created_at</div>
-            <input className="input" disabled value="(auto)" />
-          </label>
-          <label>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>updated_at</div>
-            <input className="input" disabled value="(auto)" />
-          </label>
+          <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 12, opacity: 0.75, fontSize: 12 }}>
+            <div>
+              <b>created_at:</b> —
+            </div>
+            <div>
+              <b>updated_at:</b> —
+            </div>
+          </div>
         </form>
       </Modal>
     </div>

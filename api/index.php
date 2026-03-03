@@ -54,6 +54,8 @@ if ($relativePath === '/login' && $method === 'POST') {
     }
 
     $_SESSION['uc_user_id'] = (string)$user['user_id'];
+    $_SESSION['uc_code'] = (string)($user['code'] ?? '');
+    $_SESSION['uc_codigo'] = (string)($user['code'] ?? '');
 
     json_response([
         'userId' => (string)$user['user_id'],
@@ -76,6 +78,8 @@ if ($relativePath === '/me' && $method === 'GET') {
         json_response(null);
         exit;
     }
+    $_SESSION['uc_code'] = (string)($user['code'] ?? '');
+    $_SESSION['uc_codigo'] = (string)($user['code'] ?? '');
     json_response([
         'userId' => (string)$user['user_id'],
         'nome' => (string)$user['nome'],
@@ -94,8 +98,59 @@ if ($relativePath === '/logout' && $method === 'POST') {
     exit;
 }
 
+if ($relativePath === '/cadastros/options' && $method === 'GET') {
+    $userId = $_SESSION['uc_user_id'] ?? null;
+    if (!is_string($userId) || trim($userId) === '') {
+        json_response(['detail' => 'Não autenticado.'], 401);
+        exit;
+    }
+    $code = trim((string)($_SESSION['uc_code'] ?? $_SESSION['uc_codigo'] ?? ''));
+    if ($code === '') {
+        json_response(['detail' => 'Nenhuma obra selecionada.'], 409);
+        exit;
+    }
+    $rows = fetch_all(
+        'SELECT user_id, nome, tipo_usuario, status FROM uc_users WHERE code = ? ORDER BY nome ASC',
+        [$code]
+    );
+    $options = array_map(fn ($r) => [
+        'userId' => (string)$r['user_id'],
+        'nome' => (string)$r['nome'],
+        'tipoUsuario' => (string)$r['tipo_usuario'],
+        'status' => (string)$r['status'],
+    ], $rows);
+    json_response($options);
+    exit;
+}
+
+if ($relativePath === '/fases/options' && $method === 'GET') {
+    $userId = $_SESSION['uc_user_id'] ?? null;
+    if (!is_string($userId) || trim($userId) === '') {
+        json_response(['detail' => 'Não autenticado.'], 401);
+        exit;
+    }
+    $code = trim((string)($_SESSION['uc_code'] ?? $_SESSION['uc_codigo'] ?? ''));
+    if ($code === '') {
+        json_response(['detail' => 'Nenhuma obra selecionada.'], 409);
+        exit;
+    }
+    $rows = fetch_all(
+        'SELECT fase_id, fase, data_inicio, previsao_finalizacao, data_finalizacao FROM uc_fases WHERE code = ? AND deleted_at IS NULL ORDER BY data_inicio ASC',
+        [$code]
+    );
+    $options = array_map(fn ($r) => [
+        'faseId' => (string)$r['fase_id'],
+        'fase' => (string)$r['fase'],
+        'dataInicio' => (string)$r['data_inicio'],
+        'previsaoFinalizacao' => (string)$r['previsao_finalizacao'],
+        'dataFinalizacao' => $r['data_finalizacao'] !== null ? (string)$r['data_finalizacao'] : null,
+    ], $rows);
+    json_response($options);
+    exit;
+}
+
 if ($relativePath === '/health' && $method === 'GET') {
-    json_response(['ok' => true]);
+    json_response(['ok' => true, 'time' => date(DATE_ATOM)]);
     exit;
 }
 
