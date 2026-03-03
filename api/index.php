@@ -473,6 +473,112 @@ if ($relativePath === '/cadastros' && $method === 'POST') {
     exit;
 }
 
+if (preg_match('#^/cadastros/([^/]+)$#', $relativePath, $m) && $method === 'PUT') {
+    require_authenticated_user_id();
+    $code = require_active_obra_codigo();
+    $userId = trim((string)$m[1]);
+    if ($userId === '') {
+        json_response(['detail' => 'user_id inválido.'], 400);
+        exit;
+    }
+
+    $existing = fetch_one('SELECT * FROM uc_users WHERE user_id = ? AND code = ? LIMIT 1', [$userId, $code]);
+    if (!$existing) {
+        json_response(['detail' => 'Usuário não encontrado.'], 404);
+        exit;
+    }
+
+    $payload = parse_json_body();
+
+    $tipoUsuario = (string)($payload['tipo_usuario'] ?? '');
+    $allowedTipos = ['Pedreiro', 'Ajudante', 'FornecedorMateriais', 'Engenheiro', 'PrestadorServico', 'Gerente', 'Owner'];
+    if (!in_array($tipoUsuario, $allowedTipos, true)) {
+        fail_validation('tipo_usuario', 'Tipo de usuário inválido');
+    }
+
+    $nome = trim((string)($payload['nome'] ?? ''));
+    if ($nome === '') {
+        fail_validation('nome', 'Nome é obrigatório');
+    }
+    $cpfCnpj = trim((string)($payload['cpf_cnpj'] ?? ''));
+    if ($cpfCnpj === '') {
+        fail_validation('cpf_cnpj', 'CPF/CNPJ é obrigatório');
+    }
+    $telefone = trim((string)($payload['telefone'] ?? ''));
+    if ($telefone === '') {
+        fail_validation('telefone', 'Telefone é obrigatório');
+    }
+    $endereco = trim((string)($payload['endereco'] ?? ''));
+    if ($endereco === '') {
+        fail_validation('endereco', 'Endereço é obrigatório');
+    }
+    $email = trim((string)($payload['email'] ?? ''));
+    if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        fail_validation('email', 'Email inválido');
+    }
+    $status = (string)($payload['status'] ?? '');
+    if (!in_array($status, ['ATIVO', 'INATIVO'], true)) {
+        fail_validation('status', 'Status inválido');
+    }
+
+    $foto = optional_string($payload['foto'] ?? null);
+    $notas = optional_string($payload['notas'] ?? null);
+    $resetSenha = (bool)($payload['reset_senha'] ?? false);
+
+    $now = now_datetime_ms();
+
+    $pdo = Database::connection();
+    try {
+        $sql = 'UPDATE uc_users
+                SET foto = ?, tipo_usuario = ?, nome = ?, cpf_cnpj = ?, telefone = ?, endereco = ?, email = ?, notas = ?, status = ?, updated_at = ?';
+        $params = [
+            $foto,
+            $tipoUsuario,
+            $nome,
+            $cpfCnpj,
+            $telefone,
+            $endereco,
+            $email,
+            $notas,
+            $status,
+            $now,
+        ];
+        if ($resetSenha) {
+            $sql .= ', password_hash = ?';
+            $params[] = password_hash('UnderConstruction', PASSWORD_DEFAULT);
+        }
+        $sql .= ' WHERE user_id = ? AND code = ?';
+        $params[] = $userId;
+        $params[] = $code;
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+    } catch (PDOException $e) {
+        if ($e->getCode() === '23000') {
+            json_response(['detail' => 'CPF/CNPJ ou email já cadastrado.'], 409);
+            exit;
+        }
+        throw $e;
+    }
+
+    $row = fetch_one('SELECT user_id, foto, tipo_usuario, nome, cpf_cnpj, telefone, endereco, email, notas, status, created_at, updated_at FROM uc_users WHERE user_id = ? AND code = ? LIMIT 1', [$userId, $code]);
+    json_response([
+        'userId' => (string)$row['user_id'],
+        'foto' => $row['foto'] !== null ? (string)$row['foto'] : null,
+        'tipoUsuario' => (string)$row['tipo_usuario'],
+        'nome' => (string)$row['nome'],
+        'cpfCnpj' => (string)$row['cpf_cnpj'],
+        'telefone' => (string)$row['telefone'],
+        'endereco' => (string)$row['endereco'],
+        'email' => (string)$row['email'],
+        'notas' => $row['notas'] !== null ? (string)$row['notas'] : null,
+        'status' => (string)$row['status'],
+        'createdAt' => (string)$row['created_at'],
+        'updatedAt' => (string)$row['updated_at'],
+    ]);
+    exit;
+}
+
 if ($relativePath === '/fases' && $method === 'POST') {
     require_authenticated_user_id();
     $code = require_active_obra_codigo();

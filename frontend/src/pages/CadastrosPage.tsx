@@ -29,6 +29,26 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 type UploadResponse = { path?: string; url?: string; filename?: string };
 
+function PencilIcon({ title = 'Editar' }: { title?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      role="img"
+      aria-label={title}
+    >
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+    </svg>
+  );
+}
+
 function apiBaseUrl() {
   const baseUrl = (import.meta as any).env?.BASE_URL ?? '/';
   return `${String(baseUrl).replace(/\/?$/, '/')}`;
@@ -54,6 +74,8 @@ async function uploadFoto(file: File): Promise<UploadResponse> {
 
 export default function CadastrosPage() {
   const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<'create' | 'edit'>('create');
+  const [editingRow, setEditingRow] = useState<any | null>(null);
   const [saving, setSaving] = useState(false);
   const [selectedPhotoFile, setSelectedPhotoFile] = useState<File | null>(null);
   const [rows, setRows] = useState<any[]>([]);
@@ -116,6 +138,8 @@ export default function CadastrosPage() {
         <button
           className="btn primary"
           onClick={() => {
+            setMode('create');
+            setEditingRow(null);
             form.reset(defaults);
             setSelectedPhotoFile(null);
             setOpen(true);
@@ -161,7 +185,7 @@ export default function CadastrosPage() {
               <th style={{ padding: 10 }}>Telefone</th>
               <th style={{ padding: 10 }}>Email</th>
               <th style={{ padding: 10 }}>Status</th>
-              <th style={{ padding: 10 }} />
+              <th style={{ padding: 10 }}>Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -192,7 +216,34 @@ export default function CadastrosPage() {
                   <td style={{ padding: 10 }}>{r.telefone}</td>
                   <td style={{ padding: 10 }}>{r.email}</td>
                   <td style={{ padding: 10 }}>{r.status}</td>
-                  <td style={{ padding: 10, opacity: 0.7, fontSize: 12 }}>{r.createdAt}</td>
+                  <td style={{ padding: 10 }}>
+                    <button
+                      className="btn"
+                      type="button"
+                      title="Editar"
+                      onClick={() => {
+                        setMode('edit');
+                        setEditingRow(r);
+                        setSelectedPhotoFile(null);
+                        form.reset({
+                          foto: r.foto || '',
+                          tipo_usuario: r.tipoUsuario,
+                          nome: r.nome,
+                          cpf_cnpj: r.cpfCnpj,
+                          telefone: r.telefone,
+                          endereco: r.endereco,
+                          email: r.email,
+                          notas: r.notas || '',
+                          status: r.status,
+                          reset_senha: false
+                        });
+                        setOpen(true);
+                      }}
+                      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                    >
+                      <PencilIcon />
+                    </button>
+                  </td>
                 </tr>
               ))
             )}
@@ -202,7 +253,7 @@ export default function CadastrosPage() {
 
       <Modal
         open={open}
-        title="Novo usuário"
+        title={mode === 'edit' ? 'Editar usuário' : 'Novo usuário'}
         onClose={() => setOpen(false)}
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
@@ -220,14 +271,17 @@ export default function CadastrosPage() {
                     const uploaded = await uploadFoto(selectedPhotoFile);
                     fotoPath = uploaded.path || uploaded.url || uploaded.filename || '';
                   }
-                  await apiFetch('/cadastros', {
-                    method: 'POST',
-                    json: {
-                      ...values,
-                      foto: fotoPath || null,
-                      reset_senha: Boolean(values.reset_senha)
-                    }
-                  });
+                  const payload = {
+                    ...values,
+                    foto: fotoPath || null,
+                    reset_senha: Boolean(values.reset_senha)
+                  };
+                  if (mode === 'edit' && editingRow?.userId) {
+                    await apiFetch(`/cadastros/${editingRow.userId}`, { method: 'PUT', json: payload });
+                  } else {
+                    await apiFetch('/cadastros', { method: 'POST', json: payload });
+                  }
+                  await load();
                   setOpen(false);
                 } catch (e) {
                   alert(e instanceof Error ? e.message : 'Falha ao salvar usuário');
@@ -359,10 +413,10 @@ export default function CadastrosPage() {
 
           <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 12, opacity: 0.75, fontSize: 12 }}>
             <div>
-              <b>created_at:</b> —
+              <b>created_at:</b> {mode === 'edit' ? (editingRow?.createdAt || '—') : '—'}
             </div>
             <div>
-              <b>updated_at:</b> —
+              <b>updated_at:</b> {mode === 'edit' ? (editingRow?.updatedAt || '—') : '—'}
             </div>
           </div>
         </form>
