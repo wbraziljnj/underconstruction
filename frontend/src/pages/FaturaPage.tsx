@@ -36,6 +36,14 @@ type FormValues = z.infer<typeof schema>;
 type UserOption = { userId: string; nome: string; tipoUsuario: string; status: string };
 type FaseOption = { faseId: string; fase: string };
 
+function formatBrDate(value?: string) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+
 function nowLocalDatetime() {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -169,8 +177,8 @@ export default function FaturaPage() {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ textAlign: 'left', opacity: 0.8 }}>
-              <th style={{ padding: 10 }}>Data</th>
               <th style={{ padding: 10 }}>Descrição</th>
+              <th style={{ padding: 10 }}>Data</th>
               <th style={{ padding: 10 }}>Quantidade</th>
               <th style={{ padding: 10 }}>Valor</th>
               <th style={{ padding: 10 }}>Total</th>
@@ -200,8 +208,8 @@ export default function FaturaPage() {
             ) : (
               rows.map((r) => (
                 <tr key={r.faturaId} style={{ borderTop: '1px solid var(--border)' }}>
-                  <td style={{ padding: 10 }}>{r.data}</td>
                   <td style={{ padding: 10 }}>{r.fatura}</td>
+                  <td style={{ padding: 10 }}>{formatBrDate(r.data)}</td>
                   <td style={{ padding: 10 }}>{r.quantidade}</td>
                   <td style={{ padding: 10 }}>{r.valor}</td>
                   <td style={{ padding: 10 }}>{r.total}</td>
@@ -285,7 +293,7 @@ export default function FaturaPage() {
           </label>
 
           <label>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>Status</div>
+            <div style={{ fontSize: 12, opacity: 0.8 }}>Pagamento</div>
             <select
               className="input"
               {...form.register('pagamento')}
