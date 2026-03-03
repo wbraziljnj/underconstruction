@@ -89,6 +89,16 @@ function require_privileged_role(): void
     }
 }
 
+function require_obra_cadastrada(): void
+{
+    $codigo = require_active_obra_codigo();
+    $row = fetch_one('SELECT obra_id FROM uc_obra WHERE codigo = ? LIMIT 1', [$codigo]);
+    if (!$row) {
+        json_response(['detail' => 'Cadastre a Obra antes de cadastrar usuários, fases ou faturas.'], 409);
+        exit;
+    }
+}
+
 if ($relativePath === '/upload-foto' && $method === 'POST') {
     require_authenticated_user_id();
     require_active_obra_codigo();
@@ -454,6 +464,7 @@ if ($relativePath === '/faturas' && $method === 'GET') {
 if ($relativePath === '/cadastros' && $method === 'POST') {
     require_authenticated_user_id();
     require_privileged_role();
+    require_obra_cadastrada();
     $code = require_active_obra_codigo();
 
     $payload = parse_json_body();
@@ -544,6 +555,7 @@ if ($relativePath === '/cadastros' && $method === 'POST') {
 if (preg_match('#^/cadastros/([^/]+)$#', $relativePath, $m) && $method === 'PUT') {
     require_authenticated_user_id();
     require_privileged_role();
+    require_obra_cadastrada();
     $code = require_active_obra_codigo();
     $userId = trim((string)$m[1]);
     if ($userId === '') {
@@ -661,6 +673,7 @@ if (preg_match('#^/cadastros/([^/]+)$#', $relativePath, $m) && $method === 'PUT'
 if (preg_match('#^/cadastros/(\\d+)$#', $relativePath, $m) && $method === 'DELETE') {
     require_authenticated_user_id();
     require_privileged_role();
+    require_obra_cadastrada();
     $code = require_active_obra_codigo();
     $targetId = (int)$m[1];
 
@@ -688,6 +701,7 @@ if (preg_match('#^/cadastros/(\\d+)$#', $relativePath, $m) && $method === 'DELET
 if ($relativePath === '/fases' && $method === 'POST') {
     require_authenticated_user_id();
     require_privileged_role();
+    require_obra_cadastrada();
     $code = require_active_obra_codigo();
 
     $payload = parse_json_body();
@@ -745,6 +759,7 @@ if ($relativePath === '/fases' && $method === 'POST') {
 if (preg_match('#^/fases/(\\d+)$#', $relativePath, $m) && $method === 'PUT') {
     require_authenticated_user_id();
     require_privileged_role();
+    require_obra_cadastrada();
     $code = require_active_obra_codigo();
     $faseId = (int)$m[1];
 
@@ -832,6 +847,7 @@ if (preg_match('#^/fases/(\\d+)$#', $relativePath, $m) && $method === 'PUT') {
 if (preg_match('#^/fases/(\\d+)$#', $relativePath, $m) && $method === 'DELETE') {
     require_authenticated_user_id();
     require_privileged_role();
+    require_obra_cadastrada();
     $code = require_active_obra_codigo();
     $faseId = (int)$m[1];
 
@@ -860,6 +876,7 @@ if (preg_match('#^/fases/(\\d+)$#', $relativePath, $m) && $method === 'DELETE') 
 if ($relativePath === '/faturas' && $method === 'POST') {
     require_authenticated_user_id();
     require_privileged_role();
+    require_obra_cadastrada();
     $code = require_active_obra_codigo();
 
     $payload = parse_json_body();
@@ -946,6 +963,7 @@ if ($relativePath === '/faturas' && $method === 'POST') {
 if (preg_match('#^/faturas/(\\d+)$#', $relativePath, $m) && $method === 'PUT') {
     require_authenticated_user_id();
     require_privileged_role();
+    require_obra_cadastrada();
     $code = require_active_obra_codigo();
     $faturaId = (int)$m[1];
 
@@ -1064,6 +1082,7 @@ if (preg_match('#^/faturas/(\\d+)$#', $relativePath, $m) && $method === 'PUT') {
 if (preg_match('#^/faturas/(\\d+)$#', $relativePath, $m) && $method === 'DELETE') {
     require_authenticated_user_id();
     require_privileged_role();
+    require_obra_cadastrada();
     $code = require_active_obra_codigo();
     $faturaId = (int)$m[1];
 
