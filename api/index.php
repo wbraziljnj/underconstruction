@@ -2,10 +2,13 @@
 
 declare(strict_types=1);
 
+// Evita que warnings/notices quebrem respostas JSON em produção.
+@ini_set('display_errors', '0');
+@ini_set('log_errors', '1');
+
 require_once __DIR__ . '/src/Database.php';
 require_once __DIR__ . '/src/helpers.php';
 
-use PDOException;
 use UC\Database;
 
 header('Access-Control-Allow-Origin: *');
