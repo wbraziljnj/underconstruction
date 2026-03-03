@@ -3,6 +3,7 @@ import { useAuth } from './auth/auth';
 import LoginPage from './pages/LoginPage';
 import AppShell from './layout/AppShell';
 import HomePage from './pages/HomePage';
+import ObraPage from './pages/ObraPage';
 import CadastrosPage from './pages/CadastrosPage';
 import FasesPage from './pages/FasesPage';
 import FaturaPage from './pages/FaturaPage';
@@ -21,6 +22,7 @@ export default function App() {
 
       <Route element={user ? <AppShell /> : <Navigate to="/login" replace />}>
         <Route path="/home" element={<HomePage />} />
+        <Route path="/obra" element={<ObraPage />} />
         <Route path="/cadastros" element={<CadastrosPage />} />
         <Route path="/fases" element={<FasesPage />} />
         <Route path="/fatura" element={<FaturaPage />} />

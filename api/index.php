@@ -1088,6 +1088,154 @@ if (preg_match('#^/faturas/(\\d+)$#', $relativePath, $m) && $method === 'DELETE'
     exit;
 }
 
+if ($relativePath === '/obra' && $method === 'GET') {
+    require_authenticated_user_id();
+    $codigo = require_active_obra_codigo();
+    $row = fetch_one('SELECT * FROM uc_obra WHERE codigo = ? LIMIT 1', [$codigo]);
+    if (!$row) {
+        json_response(null);
+        exit;
+    }
+    json_response([
+        'obraId' => (int)$row['obra_id'],
+        'foto' => $row['foto'] !== null ? (string)$row['foto'] : null,
+        'nome' => (string)$row['nome'],
+        'caderneta' => $row['caderneta'] !== null ? (string)$row['caderneta'] : null,
+        'responsavel' => $row['responsavel'] !== null ? (string)$row['responsavel'] : null,
+        'rua' => $row['rua'] !== null ? (string)$row['rua'] : null,
+        'numero' => $row['numero'] !== null ? (string)$row['numero'] : null,
+        'bairro' => $row['bairro'] !== null ? (string)$row['bairro'] : null,
+        'cidade' => $row['cidade'] !== null ? (string)$row['cidade'] : null,
+        'cep' => $row['cep'] !== null ? (string)$row['cep'] : null,
+        'matricula' => $row['matricula'] !== null ? (string)$row['matricula'] : null,
+        'engenheiroResponsavel' => $row['engenheiro_responsavel'] !== null ? (string)$row['engenheiro_responsavel'] : null,
+        'data' => $row['data'] !== null ? (string)$row['data'] : null,
+        'dataInicio' => $row['data_inicio'] !== null ? (string)$row['data_inicio'] : null,
+        'dataPrevisaoFinalizacao' => $row['data_previsao_finalizacao'] !== null ? (string)$row['data_previsao_finalizacao'] : null,
+        'codigo' => (string)$row['codigo'],
+        'notas' => $row['notas'] !== null ? (string)$row['notas'] : null,
+        'createdAt' => (string)$row['created_at'],
+        'updatedAt' => (string)$row['updated_at'],
+    ]);
+    exit;
+}
+
+if ($relativePath === '/obra' && $method === 'POST') {
+    require_authenticated_user_id();
+    require_privileged_role();
+    $codigo = require_active_obra_codigo();
+
+    $existing = fetch_one('SELECT obra_id FROM uc_obra WHERE codigo = ? LIMIT 1', [$codigo]);
+    if ($existing) {
+        json_response(['detail' => 'Obra já existe para este código.'], 409);
+        exit;
+    }
+
+    $payload = parse_json_body();
+    $nome = trim((string)($payload['nome'] ?? ''));
+    if ($nome === '') {
+        fail_validation('nome', 'Nome é obrigatório');
+    }
+
+    $foto = optional_string($payload['foto'] ?? null);
+    $caderneta = optional_string($payload['caderneta'] ?? null);
+    $responsavel = optional_string($payload['responsavel'] ?? null);
+    $rua = optional_string($payload['rua'] ?? null);
+    $numero = optional_string($payload['numero'] ?? null);
+    $bairro = optional_string($payload['bairro'] ?? null);
+    $cidade = optional_string($payload['cidade'] ?? null);
+    $cep = optional_string($payload['cep'] ?? null);
+    $matricula = optional_string($payload['matricula'] ?? null);
+    $engResp = optional_string($payload['engenheiro_responsavel'] ?? ($payload['engenheiroResponsavel'] ?? null));
+    $data = parse_date_or_null($payload['data'] ?? null, 'data', false);
+    $dataInicio = parse_date_or_null($payload['data_inicio'] ?? ($payload['dataInicio'] ?? null), 'data_inicio', false);
+    $dataPrev = parse_date_or_null($payload['data_previsao_finalizacao'] ?? ($payload['dataPrevisaoFinalizacao'] ?? null), 'data_previsao_finalizacao', false);
+    $notas = optional_string($payload['notas'] ?? null);
+
+    $pdo = Database::connection();
+    $stmt = $pdo->prepare('INSERT INTO uc_obra (foto, nome, caderneta, responsavel, rua, numero, bairro, cidade, cep, matricula, engenheiro_responsavel, data, data_inicio, data_previsao_finalizacao, codigo, notas) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    $stmt->execute([
+        $foto,
+        $nome,
+        $caderneta,
+        $responsavel,
+        $rua,
+        $numero,
+        $bairro,
+        $cidade,
+        $cep,
+        $matricula,
+        $engResp,
+        $data,
+        $dataInicio,
+        $dataPrev,
+        $codigo,
+        $notas,
+    ]);
+
+    $obraId = (int)$pdo->lastInsertId();
+    json_response(['obraId' => $obraId, 'codigo' => $codigo], 201);
+    exit;
+}
+
+if ($relativePath === '/obra' && $method === 'PUT') {
+    require_authenticated_user_id();
+    require_privileged_role();
+    $codigo = require_active_obra_codigo();
+
+    $row = fetch_one('SELECT obra_id FROM uc_obra WHERE codigo = ? LIMIT 1', [$codigo]);
+    if (!$row) {
+        // upsert via POST
+        json_response(['detail' => 'Obra não existe.'], 404);
+        exit;
+    }
+
+    $payload = parse_json_body();
+    $nome = trim((string)($payload['nome'] ?? ''));
+    if ($nome === '') {
+        fail_validation('nome', 'Nome é obrigatório');
+    }
+
+    $foto = optional_string($payload['foto'] ?? null);
+    $caderneta = optional_string($payload['caderneta'] ?? null);
+    $responsavel = optional_string($payload['responsavel'] ?? null);
+    $rua = optional_string($payload['rua'] ?? null);
+    $numero = optional_string($payload['numero'] ?? null);
+    $bairro = optional_string($payload['bairro'] ?? null);
+    $cidade = optional_string($payload['cidade'] ?? null);
+    $cep = optional_string($payload['cep'] ?? null);
+    $matricula = optional_string($payload['matricula'] ?? null);
+    $engResp = optional_string($payload['engenheiro_responsavel'] ?? ($payload['engenheiroResponsavel'] ?? null));
+    $data = parse_date_or_null($payload['data'] ?? null, 'data', false);
+    $dataInicio = parse_date_or_null($payload['data_inicio'] ?? ($payload['dataInicio'] ?? null), 'data_inicio', false);
+    $dataPrev = parse_date_or_null($payload['data_previsao_finalizacao'] ?? ($payload['dataPrevisaoFinalizacao'] ?? null), 'data_previsao_finalizacao', false);
+    $notas = optional_string($payload['notas'] ?? null);
+
+    $pdo = Database::connection();
+    $stmt = $pdo->prepare('UPDATE uc_obra SET foto = ?, nome = ?, caderneta = ?, responsavel = ?, rua = ?, numero = ?, bairro = ?, cidade = ?, cep = ?, matricula = ?, engenheiro_responsavel = ?, data = ?, data_inicio = ?, data_previsao_finalizacao = ?, notas = ? WHERE codigo = ?');
+    $stmt->execute([
+        $foto,
+        $nome,
+        $caderneta,
+        $responsavel,
+        $rua,
+        $numero,
+        $bairro,
+        $cidade,
+        $cep,
+        $matricula,
+        $engResp,
+        $data,
+        $dataInicio,
+        $dataPrev,
+        $notas,
+        $codigo,
+    ]);
+
+    json_response(['ok' => true]);
+    exit;
+}
+
 if ($relativePath === '/health' && $method === 'GET') {
     json_response(['ok' => true, 'time' => date(DATE_ATOM)]);
     exit;

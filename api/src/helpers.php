@@ -117,6 +117,21 @@ function parse_datetime_or_null(mixed $value, string $field, bool $required = fa
     return $dt->format('Y-m-d H:i:s');
 }
 
+function parse_date_or_null(mixed $value, string $field, bool $required = false): ?string
+{
+    $raw = is_string($value) ? trim($value) : '';
+    if ($raw === '') {
+        if ($required) {
+            fail_validation($field, sprintf('%s é obrigatório', $field));
+        }
+        return null;
+    }
+    if (!preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $raw)) {
+        fail_validation($field, sprintf('%s inválido', $field));
+    }
+    return $raw;
+}
+
 function normalize_decimal(mixed $value, string $field, int $scale = 2, bool $required = true): string
 {
     if ($value === null || $value === '') {
