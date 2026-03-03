@@ -26,14 +26,20 @@ type FormValues = z.infer<typeof schema>;
 
 type UserOption = { userId: string; nome: string; tipoUsuario: string; status: string };
 
-function toDatetimeLocal(value?: string | null) {
+function formatBrDate(value?: string | null) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+
+function toDateOnlyLocal(value?: string | null) {
   if (!value) return '';
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return '';
   const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(
-    d.getMinutes()
-  )}`;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 function PencilIcon({ title = 'Editar' }: { title?: string }) {
@@ -54,12 +60,6 @@ function PencilIcon({ title = 'Editar' }: { title?: string }) {
       <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
     </svg>
   );
-}
-
-function toLocalDatetimeInputValue(value?: string) {
-  if (!value) return '';
-  // aceita YYYY-MM-DDTHH:mm (input) ou datas completas; mantém simples
-  return value;
 }
 
 export default function FasesPage() {
@@ -208,9 +208,9 @@ export default function FasesPage() {
               rows.map((r) => (
                 <tr key={r.faseId} style={{ borderTop: '1px solid var(--border)' }}>
                   <td style={{ padding: 10 }}>{r.fase}</td>
-                  <td style={{ padding: 10 }}>{r.dataInicio}</td>
-                  <td style={{ padding: 10 }}>{r.previsaoFinalizacao}</td>
-                  <td style={{ padding: 10 }}>{r.dataFinalizacao || '-'}</td>
+                  <td style={{ padding: 10 }}>{formatBrDate(r.dataInicio)}</td>
+                  <td style={{ padding: 10 }}>{formatBrDate(r.previsaoFinalizacao)}</td>
+                  <td style={{ padding: 10 }}>{r.dataFinalizacao ? formatBrDate(r.dataFinalizacao) : '-'}</td>
                   <td style={{ padding: 10 }}>{r.responsavelNome || '-'}</td>
                   <td style={{ padding: 10 }}>{r.valorTotal}</td>
                   <td style={{ padding: 10 }}>
@@ -224,9 +224,9 @@ export default function FasesPage() {
                         form.reset({
                           fase: r.fase || '',
                           status: r.status || 'ABERTO',
-                          data_inicio: toDatetimeLocal(r.dataInicio),
-                          previsao_finalizacao: toDatetimeLocal(r.previsaoFinalizacao),
-                          data_finalizacao: toDatetimeLocal(r.dataFinalizacao),
+                          data_inicio: toDateOnlyLocal(r.dataInicio),
+                          previsao_finalizacao: toDateOnlyLocal(r.previsaoFinalizacao),
+                          data_finalizacao: toDateOnlyLocal(r.dataFinalizacao),
                           responsavel_id: r.responsavelId ? String(r.responsavelId) : '',
                           valor_total: Number(r.valorTotal || 0),
                           valor_parcial: Number(r.valorParcial || 0),
@@ -309,26 +309,16 @@ export default function FasesPage() {
           </label>
 
           <label>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>Data início (datetime)</div>
-            <input
-              className="input"
-              type="datetime-local"
-              value={toLocalDatetimeInputValue(form.watch('data_inicio'))}
-              onChange={(e) => form.setValue('data_inicio', e.target.value, { shouldValidate: true })}
-            />
+            <div style={{ fontSize: 12, opacity: 0.8 }}>Data início</div>
+            <input className="input" type="date" {...form.register('data_inicio')} />
             {form.formState.errors.data_inicio && (
               <div style={{ color: 'var(--danger)', fontSize: 12 }}>{form.formState.errors.data_inicio.message}</div>
             )}
           </label>
 
           <label>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>Previsão finalização (datetime)</div>
-            <input
-              className="input"
-              type="datetime-local"
-              value={toLocalDatetimeInputValue(form.watch('previsao_finalizacao'))}
-              onChange={(e) => form.setValue('previsao_finalizacao', e.target.value, { shouldValidate: true })}
-            />
+            <div style={{ fontSize: 12, opacity: 0.8 }}>Previsão finalização</div>
+            <input className="input" type="date" {...form.register('previsao_finalizacao')} />
             {form.formState.errors.previsao_finalizacao && (
               <div style={{ color: 'var(--danger)', fontSize: 12 }}>
                 {form.formState.errors.previsao_finalizacao.message}
@@ -338,12 +328,7 @@ export default function FasesPage() {
 
           <label>
             <div style={{ fontSize: 12, opacity: 0.8 }}>Data finalização (opcional)</div>
-            <input
-              className="input"
-              type="datetime-local"
-              value={toLocalDatetimeInputValue(form.watch('data_finalizacao'))}
-              onChange={(e) => form.setValue('data_finalizacao', e.target.value, { shouldValidate: true })}
-            />
+            <input className="input" type="date" {...form.register('data_finalizacao')} />
           </label>
 
           <label>
