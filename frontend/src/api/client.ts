@@ -13,7 +13,8 @@ export async function apiFetch<T>(
 
   const baseUrl = (import.meta as any).env?.BASE_URL ?? '/';
   const apiBase = String(baseUrl).replace(/\/?$/, '/');
-  const res = await fetch(`${apiBase}api${path}`, {
+  const url = `${apiBase}api${path}`;
+  const res = await fetch(url, {
     ...init,
     credentials: 'include',
     headers,
@@ -23,13 +24,19 @@ export async function apiFetch<T>(
   if (res.status === 204) return undefined as T;
 
   const text = await res.text();
+  const contentType = res.headers.get('content-type') || '';
   let data: unknown = null;
   if (text) {
     try {
+      if (!contentType.includes('application/json')) {
+        const snippet = text.slice(0, 180).replace(/\s+/g, ' ').trim();
+        throw new Error(`Resposta inválida da API (não JSON). HTTP ${res.status}. CT=${contentType}. URL=${url}. Body="${snippet}"`);
+      }
       data = JSON.parse(text) as unknown;
     } catch {
       // Se o servidor devolver HTML (ex.: 404/rewrite), dá erro mais claro.
-      throw new Error(`Resposta inválida da API (não JSON). HTTP ${res.status}`);
+      const snippet = text.slice(0, 180).replace(/\s+/g, ' ').trim();
+      throw new Error(`Resposta inválida da API (não JSON). HTTP ${res.status}. URL=${url}. Body="${snippet}"`);
     }
   }
   if (!res.ok) {
