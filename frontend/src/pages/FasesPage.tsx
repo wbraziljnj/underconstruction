@@ -25,6 +25,8 @@ const schema = z
 
 type FormValues = z.infer<typeof schema>;
 
+type UserOption = { userId: string; nome: string; tipoUsuario: string; status: string };
+
 function toLocalDatetimeInputValue(value?: string) {
   if (!value) return '';
   // aceita YYYY-MM-DDTHH:mm (input) ou datas completas; mantém simples
@@ -37,6 +39,8 @@ export default function FasesPage() {
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [q, setQ] = useState('');
+  const [users, setUsers] = useState<UserOption[]>([]);
+  const [optionsError, setOptionsError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const defaults = useMemo<FormValues>(
@@ -78,6 +82,25 @@ export default function FasesPage() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    (async () => {
+      try {
+        setOptionsError(null);
+        const u = await apiFetch<UserOption[]>('/cadastros/options', { method: 'GET' });
+        if (!alive) return;
+        setUsers(u);
+      } catch (e) {
+        if (!alive) return;
+        setOptionsError(e instanceof Error ? e.message : 'Falha ao carregar usuários');
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [open]);
 
   return (
     <div className="card" style={{ padding: 12 }}>
@@ -198,6 +221,11 @@ export default function FasesPage() {
           </div>
         }
       >
+        {optionsError ? (
+          <div className="card" style={{ padding: 10, marginBottom: 10, borderColor: 'rgba(255,77,109,0.55)' }}>
+            <div style={{ color: 'var(--danger)', fontSize: 12 }}>{optionsError}</div>
+          </div>
+        ) : null}
         <form
           onSubmit={(e) => e.preventDefault()}
           style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}
@@ -259,8 +287,15 @@ export default function FasesPage() {
           </label>
 
           <label>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>Responsável ID (char(36))</div>
-            <input className="input" {...form.register('responsavel_id')} placeholder="(opcional)" />
+            <div style={{ fontSize: 12, opacity: 0.8 }}>Responsável</div>
+            <select className="input" {...form.register('responsavel_id')} defaultValue="">
+              <option value="">(opcional)</option>
+              {users.map((u) => (
+                <option key={u.userId} value={u.userId}>
+                  {u.nome}
+                </option>
+              ))}
+            </select>
           </label>
 
           <label>
