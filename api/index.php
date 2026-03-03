@@ -51,6 +51,28 @@ if (isset($_GET['ucDebug']) && $_GET['ucDebug'] === 'ping') {
 // Conectar cedo para falhar rápido (mesmo padrão do Sheila).
 Database::connection();
 
+function verify_current_user_password(string $password): void
+{
+    $userId = require_authenticated_user_id();
+    $user = fetch_one('SELECT password_hash FROM uc_users WHERE user_id = ? LIMIT 1', [(int)$userId]);
+    if (!$user) {
+        json_response(['detail' => 'Não autenticado.'], 401);
+        exit;
+    }
+    $stored = (string)($user['password_hash'] ?? '');
+    if ($stored === '') {
+        json_response(['detail' => 'Senha inválida.'], 403);
+        exit;
+    }
+    $info = password_get_info($stored);
+    $isHash = is_array($info) && (int)($info['algo'] ?? 0) !== 0;
+    $ok = $isHash ? password_verify($password, $stored) : hash_equals($stored, $password);
+    if (!$ok) {
+        json_response(['detail' => 'Senha inválida.'], 403);
+        exit;
+    }
+}
+
 if ($relativePath === '/upload-foto' && $method === 'POST') {
     require_authenticated_user_id();
     require_active_obra_codigo();
@@ -601,6 +623,32 @@ if (preg_match('#^/cadastros/([^/]+)$#', $relativePath, $m) && $method === 'PUT'
     exit;
 }
 
+if (preg_match('#^/cadastros/(\\d+)$#', $relativePath, $m) && $method === 'DELETE') {
+    require_authenticated_user_id();
+    $code = require_active_obra_codigo();
+    $targetId = (int)$m[1];
+
+    $payload = parse_json_body();
+    $password = trim((string)($payload['password'] ?? ''));
+    if ($password === '') {
+        json_response(['detail' => 'Senha é obrigatória.'], 400);
+        exit;
+    }
+    verify_current_user_password($password);
+
+    $row = fetch_one('SELECT user_id FROM uc_users WHERE user_id = ? AND code = ? LIMIT 1', [$targetId, $code]);
+    if (!$row) {
+        json_response(['detail' => 'Usuário não encontrado.'], 404);
+        exit;
+    }
+
+    $pdo = Database::connection();
+    $stmt = $pdo->prepare('DELETE FROM uc_users WHERE user_id = ? AND code = ?');
+    $stmt->execute([$targetId, $code]);
+    http_response_code(204);
+    exit;
+}
+
 if ($relativePath === '/fases' && $method === 'POST') {
     require_authenticated_user_id();
     $code = require_active_obra_codigo();
@@ -740,6 +788,33 @@ if (preg_match('#^/fases/(\\d+)$#', $relativePath, $m) && $method === 'PUT') {
         'createdAt' => (string)$row['created_at'],
         'updatedAt' => (string)$row['updated_at'],
     ]);
+    exit;
+}
+
+if (preg_match('#^/fases/(\\d+)$#', $relativePath, $m) && $method === 'DELETE') {
+    require_authenticated_user_id();
+    $code = require_active_obra_codigo();
+    $faseId = (int)$m[1];
+
+    $payload = parse_json_body();
+    $password = trim((string)($payload['password'] ?? ''));
+    if ($password === '') {
+        json_response(['detail' => 'Senha é obrigatória.'], 400);
+        exit;
+    }
+    verify_current_user_password($password);
+
+    $row = fetch_one('SELECT fase_id FROM uc_fases WHERE fase_id = ? AND code = ? LIMIT 1', [$faseId, $code]);
+    if (!$row) {
+        json_response(['detail' => 'Fase não encontrada.'], 404);
+        exit;
+    }
+
+    // FK em uc_faturas tem ON DELETE CASCADE para fase_id
+    $pdo = Database::connection();
+    $stmt = $pdo->prepare('DELETE FROM uc_fases WHERE fase_id = ? AND code = ?');
+    $stmt->execute([$faseId, $code]);
+    http_response_code(204);
     exit;
 }
 
@@ -942,6 +1017,32 @@ if (preg_match('#^/faturas/(\\d+)$#', $relativePath, $m) && $method === 'PUT') {
         'createdAt' => (string)$row['created_at'],
         'updatedAt' => (string)$row['updated_at'],
     ]);
+    exit;
+}
+
+if (preg_match('#^/faturas/(\\d+)$#', $relativePath, $m) && $method === 'DELETE') {
+    require_authenticated_user_id();
+    $code = require_active_obra_codigo();
+    $faturaId = (int)$m[1];
+
+    $payload = parse_json_body();
+    $password = trim((string)($payload['password'] ?? ''));
+    if ($password === '') {
+        json_response(['detail' => 'Senha é obrigatória.'], 400);
+        exit;
+    }
+    verify_current_user_password($password);
+
+    $row = fetch_one('SELECT fatura_id FROM uc_faturas WHERE fatura_id = ? AND code = ? LIMIT 1', [$faturaId, $code]);
+    if (!$row) {
+        json_response(['detail' => 'Fatura não encontrada.'], 404);
+        exit;
+    }
+
+    $pdo = Database::connection();
+    $stmt = $pdo->prepare('DELETE FROM uc_faturas WHERE fatura_id = ? AND code = ?');
+    $stmt->execute([$faturaId, $code]);
+    http_response_code(204);
     exit;
 }
 

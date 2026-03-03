@@ -77,6 +77,9 @@ export default function CadastrosPage() {
   const [mode, setMode] = useState<'create' | 'edit'>('create');
   const [editingRow, setEditingRow] = useState<any | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleting, setDeleting] = useState(false);
   const [selectedPhotoFile, setSelectedPhotoFile] = useState<File | null>(null);
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -257,6 +260,18 @@ export default function CadastrosPage() {
         onClose={() => setOpen(false)}
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            {mode === 'edit' ? (
+              <button
+                className="btn danger"
+                type="button"
+                onClick={() => {
+                  setDeletePassword('');
+                  setDeleteOpen(true);
+                }}
+              >
+                Excluir
+              </button>
+            ) : null}
             <button className="btn" onClick={() => setOpen(false)} type="button">
               Cancelar
             </button>
@@ -420,6 +435,55 @@ export default function CadastrosPage() {
             </div>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        open={deleteOpen}
+        title="Confirmar exclusão"
+        onClose={() => setDeleteOpen(false)}
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            <button className="btn" type="button" onClick={() => setDeleteOpen(false)} disabled={deleting}>
+              Cancelar
+            </button>
+            <button
+              className="btn danger"
+              type="button"
+              disabled={deleting}
+              onClick={async () => {
+                if (!editingRow?.userId) return;
+                try {
+                  setDeleting(true);
+                  await apiFetch(`/cadastros/${editingRow.userId}`, {
+                    method: 'DELETE',
+                    json: { password: deletePassword }
+                  });
+                  await load();
+                  setDeleteOpen(false);
+                  setOpen(false);
+                } catch (e) {
+                  alert(e instanceof Error ? e.message : 'Falha ao excluir usuário');
+                } finally {
+                  setDeleting(false);
+                }
+              }}
+            >
+              {deleting ? 'Excluindo...' : 'Excluir'}
+            </button>
+          </div>
+        }
+      >
+        <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 8 }}>
+          Digite sua senha para confirmar a exclusão deste usuário.
+        </div>
+        <input
+          className="input"
+          type="password"
+          value={deletePassword}
+          onChange={(e) => setDeletePassword(e.target.value)}
+          placeholder="Sua senha"
+          autoComplete="current-password"
+        />
       </Modal>
     </div>
   );

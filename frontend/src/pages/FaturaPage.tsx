@@ -98,6 +98,9 @@ export default function FaturaPage() {
   const [users, setUsers] = useState<UserOption[]>([]);
   const [fases, setFases] = useState<FaseOption[]>([]);
   const [optionsError, setOptionsError] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleting, setDeleting] = useState(false);
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
@@ -300,6 +303,18 @@ export default function FaturaPage() {
         onClose={() => setOpen(false)}
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            {mode === 'edit' ? (
+              <button
+                className="btn danger"
+                type="button"
+                onClick={() => {
+                  setDeletePassword('');
+                  setDeleteOpen(true);
+                }}
+              >
+                Excluir
+              </button>
+            ) : null}
             <button className="btn" onClick={() => setOpen(false)} type="button">
               Cancelar
             </button>
@@ -486,6 +501,55 @@ export default function FaturaPage() {
             </div>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        open={deleteOpen}
+        title="Confirmar exclusão"
+        onClose={() => setDeleteOpen(false)}
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            <button className="btn" type="button" onClick={() => setDeleteOpen(false)} disabled={deleting}>
+              Cancelar
+            </button>
+            <button
+              className="btn danger"
+              type="button"
+              disabled={deleting}
+              onClick={async () => {
+                if (!editingRow?.faturaId) return;
+                try {
+                  setDeleting(true);
+                  await apiFetch(`/faturas/${editingRow.faturaId}`, {
+                    method: 'DELETE',
+                    json: { password: deletePassword }
+                  });
+                  await load();
+                  setDeleteOpen(false);
+                  setOpen(false);
+                } catch (e) {
+                  alert(e instanceof Error ? e.message : 'Falha ao excluir fatura');
+                } finally {
+                  setDeleting(false);
+                }
+              }}
+            >
+              {deleting ? 'Excluindo...' : 'Excluir'}
+            </button>
+          </div>
+        }
+      >
+        <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 8 }}>
+          Digite sua senha para confirmar a exclusão desta fatura.
+        </div>
+        <input
+          className="input"
+          type="password"
+          value={deletePassword}
+          onChange={(e) => setDeletePassword(e.target.value)}
+          placeholder="Sua senha"
+          autoComplete="current-password"
+        />
       </Modal>
     </div>
   );

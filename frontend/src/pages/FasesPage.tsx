@@ -73,6 +73,9 @@ export default function FasesPage() {
   const [users, setUsers] = useState<UserOption[]>([]);
   const [optionsError, setOptionsError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   const defaults = useMemo<FormValues>(
     () => ({
@@ -252,6 +255,18 @@ export default function FasesPage() {
         onClose={() => setOpen(false)}
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            {mode === 'edit' ? (
+              <button
+                className="btn danger"
+                type="button"
+                onClick={() => {
+                  setDeletePassword('');
+                  setDeleteOpen(true);
+                }}
+              >
+                Excluir
+              </button>
+            ) : null}
             <button className="btn" onClick={() => setOpen(false)} type="button">
               Cancelar
             </button>
@@ -373,6 +388,52 @@ export default function FasesPage() {
             </div>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        open={deleteOpen}
+        title="Confirmar exclusão"
+        onClose={() => setDeleteOpen(false)}
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            <button className="btn" type="button" onClick={() => setDeleteOpen(false)} disabled={deleting}>
+              Cancelar
+            </button>
+            <button
+              className="btn danger"
+              type="button"
+              disabled={deleting}
+              onClick={async () => {
+                if (!editingRow?.faseId) return;
+                try {
+                  setDeleting(true);
+                  await apiFetch(`/fases/${editingRow.faseId}`, { method: 'DELETE', json: { password: deletePassword } });
+                  await load();
+                  setDeleteOpen(false);
+                  setOpen(false);
+                } catch (e) {
+                  alert(e instanceof Error ? e.message : 'Falha ao excluir fase');
+                } finally {
+                  setDeleting(false);
+                }
+              }}
+            >
+              {deleting ? 'Excluindo...' : 'Excluir'}
+            </button>
+          </div>
+        }
+      >
+        <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 8 }}>
+          Digite sua senha para confirmar a exclusão desta fase.
+        </div>
+        <input
+          className="input"
+          type="password"
+          value={deletePassword}
+          onChange={(e) => setDeletePassword(e.target.value)}
+          placeholder="Sua senha"
+          autoComplete="current-password"
+        />
       </Modal>
     </div>
   );
