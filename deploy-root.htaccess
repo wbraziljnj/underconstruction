@@ -1,0 +1,14 @@
+RewriteEngine On
+
+# Não reescrever API
+RewriteCond %{REQUEST_URI} (^|/)api/ [OR]
+RewriteCond %{REQUEST_URI} (^|/)api$
+RewriteRule .* - [L]
+
+# Se for arquivo/pasta existente, servir direto
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule .* - [L]
+
+# SPA: qualquer outra rota vai para index.html
+RewriteRule ^ index.html [L]

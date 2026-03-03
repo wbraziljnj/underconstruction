@@ -1,0 +1,13 @@
+node_modules
+.turbo
+.next
+.DS_Store
+dist
+.env
+web/node_modules
+api/node_modules
+deploy
+frontend/node_modules
+frontend/dist
+api/uploads/*
+!api/uploads/.gitkeep
