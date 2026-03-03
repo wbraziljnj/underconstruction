@@ -354,8 +354,7 @@ if ($relativePath === '/faturas' && $method === 'GET') {
 
 if ($relativePath === '/cadastros' && $method === 'POST') {
     require_authenticated_user_id();
-    $codigo = require_active_obra_codigo();
-    $code = trim((string)($_SESSION['uc_code'] ?? $codigo));
+    $code = require_active_obra_codigo();
 
     $payload = parse_json_body();
 
@@ -400,11 +399,11 @@ if ($relativePath === '/cadastros' && $method === 'POST') {
 
     $pdo = Database::connection();
     try {
-        $stmt = $pdo->prepare('INSERT INTO uc_users (user_id, code, codigo, foto, tipo_usuario, nome, cpf_cnpj, telefone, endereco, email, notas, status, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        // Tabela atual no MySQL usa apenas `code` (não existe `codigo` por enquanto).
+        $stmt = $pdo->prepare('INSERT INTO uc_users (user_id, code, foto, tipo_usuario, nome, cpf_cnpj, telefone, endereco, email, notas, status, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         $stmt->execute([
             $userId,
             $code,
-            $codigo,
             $foto,
             $tipoUsuario,
             $nome,
@@ -442,8 +441,7 @@ if ($relativePath === '/cadastros' && $method === 'POST') {
 
 if ($relativePath === '/fases' && $method === 'POST') {
     require_authenticated_user_id();
-    $codigo = require_active_obra_codigo();
-    $code = trim((string)($_SESSION['uc_code'] ?? $codigo));
+    $code = require_active_obra_codigo();
 
     $payload = parse_json_body();
 
@@ -473,13 +471,13 @@ if ($relativePath === '/fases' && $method === 'POST') {
     $faseId = uuid_v4();
 
     $pdo = Database::connection();
-    $stmt = $pdo->prepare('INSERT INTO uc_fases (fase_id, code, codigo, fase, status, data_inicio, previsao_finalizacao, data_finalizacao, responsavel_id, valor_total, valor_parcial, notas, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    // Tabela atual no MySQL não possui coluna `status` nem `codigo`.
+    // O status permanece como campo de UI por enquanto.
+    $stmt = $pdo->prepare('INSERT INTO uc_fases (fase_id, code, fase, data_inicio, previsao_finalizacao, data_finalizacao, responsavel_id, valor_total, valor_parcial, notas, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
     $stmt->execute([
         $faseId,
         $code,
-        $codigo,
         $fase,
-        $status,
         $dataInicio,
         $previsaoFinalizacao,
         $dataFinalizacao,
@@ -501,8 +499,7 @@ if ($relativePath === '/fases' && $method === 'POST') {
 
 if ($relativePath === '/faturas' && $method === 'POST') {
     require_authenticated_user_id();
-    $codigo = require_active_obra_codigo();
-    $code = trim((string)($_SESSION['uc_code'] ?? $codigo));
+    $code = require_active_obra_codigo();
 
     $payload = parse_json_body();
 
@@ -550,11 +547,11 @@ if ($relativePath === '/faturas' && $method === 'POST') {
     $faturaId = uuid_v4();
 
     $pdo = Database::connection();
-    $stmt = $pdo->prepare('INSERT INTO uc_faturas (fatura_id, code, codigo, descricao, data, lancamento, data_pagamento, status, pagamento, valor, quantidade, total, fase_id, responsavel_id, empresa_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    // Tabela atual no MySQL usa apenas `code` (não existe `codigo` por enquanto).
+    $stmt = $pdo->prepare('INSERT INTO uc_faturas (fatura_id, code, descricao, data, lancamento, data_pagamento, status, pagamento, valor, quantidade, total, fase_id, responsavel_id, empresa_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
     $stmt->execute([
         $faturaId,
         $code,
-        $codigo,
         $descricao,
         $data,
         $lancamento,
