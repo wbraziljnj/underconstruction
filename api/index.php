@@ -8,15 +8,46 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/src/Database.php';
 require_once __DIR__ . '/src/helpers.php';
+require_once __DIR__ . '/src/Logger.php';
 
 use UC\Database;
+use UC\Logger;
+
+$__reqStart = microtime(true);
+$__reqId = $_SERVER['HTTP_X_REQUEST_ID'] ?? uuid_v4();
+$__method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+$__requestUri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
+$__ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+
+Logger::withRequest([
+    'request_id' => $__reqId,
+    'method' => $__method,
+    'path' => (string)$__requestUri,
+    'ip' => $__ip,
+]);
+
+header('X-Request-Id: ' . $__reqId);
 
 set_exception_handler(function (Throwable $e): void {
-    error_log('[UC] Uncaught: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
+    Logger::error('exception', [
+        'error' => [
+            'type' => get_class($e),
+            'message' => $e->getMessage(),
+            'file' => $e->getFile(),
+            'line' => $e->getLine(),
+            'stack' => $e->getTraceAsString(),
+        ],
+        'http' => [
+            'method' => $_SERVER['REQUEST_METHOD'] ?? '',
+            'path' => $_SERVER['REQUEST_URI'] ?? '',
+            'status' => 500,
+        ],
+    ]);
     if (!headers_sent()) {
-        json_response(['detail' => 'Erro interno.'], 500);
-        return;
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['detail' => 'Erro interno.'], JSON_UNESCAPED_UNICODE);
     }
+    exit;
 });
 
 set_error_handler(function (int $severity, string $message, string $file, int $line): bool {
@@ -27,15 +58,53 @@ set_error_handler(function (int $severity, string $message, string $file, int $l
     throw new ErrorException($message, 0, $severity, $file, $line);
 });
 
+register_shutdown_function(function () use ($__reqStart): void {
+    $lastError = error_get_last();
+    $status = http_response_code() ?: 200;
+    if ($lastError !== null && in_array($lastError['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+        Logger::error('fatal', [
+            'error' => [
+                'type' => 'fatal',
+                'message' => $lastError['message'] ?? '',
+                'file' => $lastError['file'] ?? '',
+                'line' => $lastError['line'] ?? 0,
+            ],
+            'http' => [
+                'method' => $_SERVER['REQUEST_METHOD'] ?? '',
+                'path' => $_SERVER['REQUEST_URI'] ?? '',
+                'status' => 500,
+            ],
+        ]);
+    }
+    $duration = (int)round((microtime(true) - $__reqStart) * 1000);
+    Logger::info('request_end', [
+        'http' => [
+            'method' => $_SERVER['REQUEST_METHOD'] ?? '',
+            'path' => $_SERVER['REQUEST_URI'] ?? '',
+            'status' => $status,
+            'duration_ms' => $duration,
+        ],
+    ]);
+});
+
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Request-Id');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
 start_session_if_needed();
+if (isset($_SESSION['uc_user_id']) && $_SESSION['uc_user_id']) {
+    Logger::withRequest([
+        'request_id' => $__reqId,
+        'method' => $__method,
+        'path' => (string)$__requestUri,
+        'ip' => $__ip,
+        'user_id' => (int)$_SESSION['uc_user_id'],
+    ]);
+}
 
 $method = $_SERVER['REQUEST_METHOD'];
 $requestUri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
@@ -43,8 +112,37 @@ $scriptDir = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/');
 $relativePath = '/' . ltrim(str_replace($scriptDir, '', (string)$requestUri), '/');
 $relativePath = rtrim($relativePath, '/');
 
+Logger::info('request_start', [
+    'http' => [
+        'method' => $method,
+        'path' => $relativePath,
+    ],
+]);
+
 if (isset($_GET['ucDebug']) && $_GET['ucDebug'] === 'ping') {
     json_response(['ok' => true, 'marker' => 'uc-api', 'time' => date(DATE_ATOM)]);
+    exit;
+}
+
+if ($relativePath === '/client-log' && $method === 'POST') {
+    $payload = parse_json_body();
+    $events = [];
+    if (isset($payload[0]) && is_array($payload[0])) {
+        $events = $payload;
+    } elseif (is_array($payload)) {
+        $events = [$payload];
+    }
+    foreach ($events as $evt) {
+        if (!is_array($evt)) {
+            continue;
+        }
+        $evtSan = Logger::sanitizeContext($evt);
+        $name = is_string($evtSan['event'] ?? null) ? $evtSan['event'] : 'client_log';
+        unset($evtSan['event']);
+        $evtSan['user_agent'] = $_SERVER['HTTP_USER_AGENT'] ?? '';
+        Logger::client($name, ['service' => 'client', 'context' => $evtSan]);
+    }
+    json_response(['ok' => true], 204);
     exit;
 }
 
@@ -886,7 +984,7 @@ if ($relativePath === '/documentacoes' && $method === 'GET') {
     $subfase = trim((string)($_GET['subfase'] ?? ''));
 
     $sql = 'SELECT d.docs_id, d.documento, d.fase, d.subfase, d.valor, d.dados_pagamento, d.data_inclusao, d.data_entrega,
-                   d.status, d.responsavel_id, d.notas, d.arquivo_path, d.created_at, d.updated_at,
+                   d.status, d.pagamento_status, d.assinatura, d.responsavel_id, d.notas, d.arquivo_path, d.created_at, d.updated_at,
                    u.nome AS responsavel_nome
             FROM uc_documentacoes d
             LEFT JOIN uc_users u ON u.user_id = d.responsavel_id AND ' . uc_users_code_predicate('u.code') . '
@@ -915,7 +1013,12 @@ if ($relativePath === '/documentacoes' && $method === 'GET') {
     }
 
     $sql .= ' ORDER BY d.data_inclusao DESC, d.docs_id DESC';
-    $rows = fetch_all($sql, $params);
+    try {
+        $rows = fetch_all($sql, $params);
+    } catch (Throwable $e) {
+        json_response(['detail' => 'Erro interno ao listar documentações', 'error' => $e->getMessage()], 500);
+        exit;
+    }
     $items = array_map(fn ($r) => [
         'docsId' => (int)$r['docs_id'],
         'documento' => (string)$r['documento'],
@@ -926,6 +1029,8 @@ if ($relativePath === '/documentacoes' && $method === 'GET') {
         'dataInclusao' => (string)$r['data_inclusao'],
         'dataEntrega' => $r['data_entrega'] !== null ? (string)$r['data_entrega'] : null,
         'status' => (string)$r['status'],
+        'pagamentoStatus' => (string)$r['pagamento_status'],
+        'assinatura' => (string)$r['assinatura'],
         'responsavelId' => $r['responsavel_id'] !== null ? (string)$r['responsavel_id'] : null,
         'responsavelNome' => $r['responsavel_nome'] !== null ? (string)$r['responsavel_nome'] : null,
         'notas' => $r['notas'] !== null ? (string)$r['notas'] : null,
@@ -939,6 +1044,7 @@ if ($relativePath === '/documentacoes' && $method === 'GET') {
 }
 
 if ($relativePath === '/documentacoes' && $method === 'POST') {
+    global $FASES_FIXAS, $DOC_STATUS;
     require_authenticated_user_id();
     require_privileged_role();
     require_obra_cadastrada();
@@ -955,31 +1061,45 @@ if ($relativePath === '/documentacoes' && $method === 'POST') {
     if ($fase === '') {
         fail_validation('fase', 'Fase obrigatória');
     }
-    $subfase = trim((string)($payload['subfase'] ?? ''));
-    // Subfase é livre/opcional.
+    $subfase = optional_string($payload['subfase'] ?? null) ?? '';
 
     $status = trim((string)($payload['status'] ?? ''));
     if (!in_array($status, $DOC_STATUS, true)) {
         fail_validation('status', 'Status inválido');
     }
 
+    $pagamentoStatus = trim((string)($payload['pagamento_status'] ?? ($payload['pagamentoStatus'] ?? '')));
+    if ($pagamentoStatus === '') {
+        $pagamentoStatus = 'PENDENTE';
+    }
+
+    $assinatura = trim((string)($payload['assinatura'] ?? ''));
+    if ($assinatura === '') {
+        $assinatura = 'Sem Assinatura';
+    }
+
     $valor = normalize_decimal($payload['valor'] ?? null, 'valor', 2, true);
     $dadosPagamento = optional_string($payload['dados_pagamento'] ?? ($payload['dadosPagamento'] ?? null));
-    $notas = optional_string($payload['notas'] ?? null);
+    // `uc_documentacoes.notas` no banco está NOT NULL.
+    $notas = optional_string($payload['notas'] ?? null) ?? '';
     $dataInclusao = parse_datetime_or_null($payload['data_inclusao'] ?? ($payload['dataInclusao'] ?? ''), 'data_inclusao', false) ?? now_datetime_ms();
     $dataEntrega = parse_datetime_or_null($payload['data_entrega'] ?? ($payload['dataEntrega'] ?? ''), 'data_entrega', false);
     $arquivoPath = optional_string($payload['arquivo_path'] ?? ($payload['arquivoPath'] ?? null));
 
-    $responsavelIdRaw = optional_string($payload['responsavel_id'] ?? ($payload['responsavelId'] ?? null));
-    if ($responsavelIdRaw === null || !ctype_digit($responsavelIdRaw)) {
-        fail_validation('responsavel_id', 'Responsável é obrigatório');
+    $responsavelIdRawMixed = $payload['responsavel_id'] ?? ($payload['responsavelId'] ?? null);
+    $responsavelIdRaw = is_int($responsavelIdRawMixed) ? (string)$responsavelIdRawMixed : optional_string($responsavelIdRawMixed);
+    $responsavelId = null;
+    if (is_string($responsavelIdRaw) && ctype_digit($responsavelIdRaw)) {
+        $responsavelId = (int)$responsavelIdRaw;
+        if ($responsavelId <= 0) {
+            $responsavelId = null;
+        }
     }
-    $responsavelId = (int)$responsavelIdRaw;
 
     $now = now_datetime_ms();
     $pdo = Database::connection();
     try {
-        $stmt = $pdo->prepare('INSERT INTO uc_documentacoes (documento, fase, subfase, valor, dados_pagamento, data_inclusao, data_entrega, status, responsavel_id, notas, arquivo_path, created_at, updated_at, code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        $stmt = $pdo->prepare('INSERT INTO uc_documentacoes (documento, fase, subfase, valor, dados_pagamento, data_inclusao, data_entrega, status, pagamento_status, assinatura, responsavel_id, notas, arquivo_path, created_at, updated_at, code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         $stmt->execute([
             $documento,
             $fase,
@@ -989,6 +1109,8 @@ if ($relativePath === '/documentacoes' && $method === 'POST') {
             $dataInclusao,
             $dataEntrega,
             $status,
+            $pagamentoStatus,
+            $assinatura,
             $responsavelId,
             $notas,
             $arquivoPath,
@@ -1008,11 +1130,14 @@ if ($relativePath === '/documentacoes' && $method === 'POST') {
         'fase' => $fase,
         'subfase' => $subfase,
         'status' => $status,
+        'pagamentoStatus' => $pagamentoStatus,
+        'assinatura' => $assinatura,
     ], 201);
     exit;
 }
 
 if (preg_match('#^/documentacoes/(\\d+)$#', $relativePath, $m) && $method === 'PUT') {
+    global $FASES_FIXAS, $DOC_STATUS;
     require_authenticated_user_id();
     require_privileged_role();
     require_obra_cadastrada();
@@ -1036,30 +1161,47 @@ if (preg_match('#^/documentacoes/(\\d+)$#', $relativePath, $m) && $method === 'P
     if ($fase === '') {
         fail_validation('fase', 'Fase obrigatória');
     }
-    $subfase = trim((string)($payload['subfase'] ?? ''));
-    // Subfase é livre/opcional.
+    $subfase = optional_string($payload['subfase'] ?? null) ?? '';
 
     $status = trim((string)($payload['status'] ?? ''));
     if (!in_array($status, $DOC_STATUS, true)) {
         fail_validation('status', 'Status inválido');
     }
 
+    $pagamentoStatus = trim((string)($payload['pagamento_status'] ?? ($payload['pagamentoStatus'] ?? '')));
+    if ($pagamentoStatus === '') {
+        $pagamentoStatus = (string)($existing['pagamento_status'] ?? 'PENDENTE');
+    }
+    if ($pagamentoStatus === '') {
+        $pagamentoStatus = 'PENDENTE';
+    }
+
+    $assinatura = trim((string)($payload['assinatura'] ?? ''));
+    if ($assinatura === '') {
+        $assinatura = (string)($existing['assinatura'] ?? 'Sem Assinatura');
+    }
+
     $valor = normalize_decimal($payload['valor'] ?? null, 'valor', 2, true);
     $dadosPagamento = optional_string($payload['dados_pagamento'] ?? ($payload['dadosPagamento'] ?? null));
-    $notas = optional_string($payload['notas'] ?? null);
+    // `uc_documentacoes.notas` no banco está NOT NULL.
+    $notas = optional_string($payload['notas'] ?? null) ?? '';
     $dataInclusao = parse_datetime_or_null($payload['data_inclusao'] ?? ($payload['dataInclusao'] ?? ''), 'data_inclusao', false) ?? (string)($existing['data_inclusao'] ?? now_datetime_ms());
     $dataEntrega = parse_datetime_or_null($payload['data_entrega'] ?? ($payload['dataEntrega'] ?? ''), 'data_entrega', false);
     $arquivoPath = optional_string($payload['arquivo_path'] ?? ($payload['arquivoPath'] ?? null)) ?? ($existing['arquivo_path'] ?? null);
 
-    $responsavelIdRaw = optional_string($payload['responsavel_id'] ?? ($payload['responsavelId'] ?? null));
-    if ($responsavelIdRaw === null || !ctype_digit($responsavelIdRaw)) {
-        fail_validation('responsavel_id', 'Responsável é obrigatório');
+    $responsavelIdRawMixed = $payload['responsavel_id'] ?? ($payload['responsavelId'] ?? null);
+    $responsavelIdRaw = is_int($responsavelIdRawMixed) ? (string)$responsavelIdRawMixed : optional_string($responsavelIdRawMixed);
+    $responsavelId = null;
+    if (is_string($responsavelIdRaw) && ctype_digit($responsavelIdRaw)) {
+        $responsavelId = (int)$responsavelIdRaw;
+        if ($responsavelId <= 0) {
+            $responsavelId = null;
+        }
     }
-    $responsavelId = (int)$responsavelIdRaw;
 
     $pdo = Database::connection();
     try {
-        $stmt = $pdo->prepare('UPDATE uc_documentacoes SET documento = ?, fase = ?, subfase = ?, valor = ?, dados_pagamento = ?, data_inclusao = ?, data_entrega = ?, status = ?, responsavel_id = ?, notas = ?, arquivo_path = ?, updated_at = ? WHERE docs_id = ? AND code = ?');
+        $stmt = $pdo->prepare('UPDATE uc_documentacoes SET documento = ?, fase = ?, subfase = ?, valor = ?, dados_pagamento = ?, data_inclusao = ?, data_entrega = ?, status = ?, pagamento_status = ?, assinatura = ?, responsavel_id = ?, notas = ?, arquivo_path = ?, updated_at = ? WHERE docs_id = ? AND code = ?');
         $stmt->execute([
             $documento,
             $fase,
@@ -1069,6 +1211,8 @@ if (preg_match('#^/documentacoes/(\\d+)$#', $relativePath, $m) && $method === 'P
             $dataInclusao,
             $dataEntrega,
             $status,
+            $pagamentoStatus,
+            $assinatura,
             $responsavelId,
             $notas,
             $arquivoPath,
@@ -1083,7 +1227,7 @@ if (preg_match('#^/documentacoes/(\\d+)$#', $relativePath, $m) && $method === 'P
 
     $row = fetch_one(
         'SELECT d.docs_id, d.documento, d.fase, d.subfase, d.valor, d.dados_pagamento, d.data_inclusao, d.data_entrega,
-                d.status, d.responsavel_id, d.notas, d.arquivo_path, d.created_at, d.updated_at,
+                d.status, d.pagamento_status, d.assinatura, d.responsavel_id, d.notas, d.arquivo_path, d.created_at, d.updated_at,
                 u.nome AS responsavel_nome
          FROM uc_documentacoes d
          LEFT JOIN uc_users u ON u.user_id = d.responsavel_id
@@ -1100,6 +1244,8 @@ if (preg_match('#^/documentacoes/(\\d+)$#', $relativePath, $m) && $method === 'P
         'dataInclusao' => $row['data_inclusao'] ?? $dataInclusao,
         'dataEntrega' => $row['data_entrega'] ?? $dataEntrega,
         'status' => $row['status'] ?? $status,
+        'pagamentoStatus' => $row['pagamento_status'] ?? $pagamentoStatus,
+        'assinatura' => $row['assinatura'] ?? $assinatura,
         'responsavelId' => $row['responsavel_id'] ?? $responsavelId,
         'responsavelNome' => $row['responsavel_nome'] ?? null,
         'notas' => $row['notas'] ?? $notas,
@@ -1131,6 +1277,58 @@ if (preg_match('#^/documentacoes/(\\d+)$#', $relativePath, $m) && $method === 'D
     $stmt = $pdo->prepare('DELETE FROM uc_documentacoes WHERE docs_id = ? AND code = ?');
     $stmt->execute([$docsId, $code]);
     http_response_code(204);
+    exit;
+}
+
+if ($relativePath === '/debug/export-logs' && $method === 'GET') {
+    $debug = filter_var(getenv('APP_DEBUG'), FILTER_VALIDATE_BOOL);
+    if (!$debug) {
+        require_privileged_role();
+    }
+    $dir = getenv('LOG_DIR') ?: 'logs';
+    $days = (int)($_GET['days'] ?? 1);
+    if ($days < 1) $days = 1;
+    if ($days > 3) $days = 3;
+    $limit = (int)($_GET['limit'] ?? 500);
+    if ($limit < 1) $limit = 1;
+    if ($limit > 1000) $limit = 1000;
+    $requestIdFilter = trim((string)($_GET['request_id'] ?? ''));
+
+    $streams = ['app', 'error', 'client'];
+    $today = new DateTimeImmutable('today');
+    $files = [];
+    for ($i = 0; $i < $days; $i++) {
+        $date = $today->modify("-{$i} days")->format('Y-m-d');
+        foreach ($streams as $s) {
+            $path = rtrim($dir, '/') . "/{$s}-{$date}.jsonl";
+            if (is_file($path)) {
+                $files[] = $path;
+            }
+        }
+    }
+
+    $items = [];
+    foreach ($files as $file) {
+        $lines = @file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        if (!is_array($lines)) {
+            continue;
+        }
+        foreach ($lines as $line) {
+            $decoded = json_decode($line, true);
+            if (!is_array($decoded)) {
+                continue;
+            }
+            if ($requestIdFilter !== '' && ($decoded['request_id'] ?? '') !== $requestIdFilter) {
+                continue;
+            }
+            $items[] = $decoded;
+            if (count($items) >= $limit) {
+                break 2;
+            }
+        }
+    }
+
+    json_response(['items' => $items]);
     exit;
 }
 

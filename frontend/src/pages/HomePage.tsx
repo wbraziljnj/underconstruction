@@ -59,26 +59,69 @@ export default function HomePage() {
         </div>
       ) : null}
 
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
+      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
         <div className="card" style={{ padding: 12 }}>
-          <div style={{ opacity: 0.7, fontSize: 12 }}>Fases abertas</div>
-          <div style={{ fontSize: 26, fontWeight: 800 }}>{loading ? '—' : phases?.abertas ?? 0}</div>
+          <div style={{ opacity: 0.7, fontSize: 12, marginBottom: 8 }}>Fases</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div
+              style={{
+                display: 'inline-flex',
+                gap: 6,
+                alignItems: 'center',
+                padding: '6px 10px',
+                borderRadius: 999,
+                background: 'rgba(255, 193, 7, 0.18)',
+                border: '1px solid rgba(255, 193, 7, 0.35)'
+              }}
+            >
+              <span style={{ opacity: 0.8, fontSize: 12 }}>Abertas</span>
+              <b>{loading ? '—' : phases?.abertas ?? 0}</b>
+            </div>
+            <div
+              style={{
+                display: 'inline-flex',
+                gap: 6,
+                alignItems: 'center',
+                padding: '6px 10px',
+                borderRadius: 999,
+                background: 'rgba(33, 150, 243, 0.14)',
+                border: '1px solid rgba(33, 150, 243, 0.28)'
+              }}
+            >
+              <span style={{ opacity: 0.8, fontSize: 12 }}>Andamentos</span>
+              <b>{loading ? '—' : phases?.andamentos ?? 0}</b>
+            </div>
+            <div
+              style={{
+                display: 'inline-flex',
+                gap: 6,
+                alignItems: 'center',
+                padding: '6px 10px',
+                borderRadius: 999,
+                background: 'rgba(244, 67, 54, 0.14)',
+                border: '1px solid rgba(244, 67, 54, 0.28)'
+              }}
+            >
+              <span style={{ opacity: 0.8, fontSize: 12 }}>Pendentes</span>
+              <b>{loading ? '—' : phases?.pendentes ?? 0}</b>
+            </div>
+            <div
+              style={{
+                display: 'inline-flex',
+                gap: 6,
+                alignItems: 'center',
+                padding: '6px 10px',
+                borderRadius: 999,
+                background: 'rgba(76, 175, 80, 0.14)',
+                border: '1px solid rgba(76, 175, 80, 0.28)'
+              }}
+            >
+              <span style={{ opacity: 0.8, fontSize: 12 }}>Finalizadas</span>
+              <b>{loading ? '—' : phases?.finalizadas ?? 0}</b>
+            </div>
+          </div>
         </div>
-        <div className="card" style={{ padding: 12 }}>
-          <div style={{ opacity: 0.7, fontSize: 12 }}>Fases andamentos</div>
-          <div style={{ fontSize: 26, fontWeight: 800 }}>{loading ? '—' : phases?.andamentos ?? 0}</div>
-        </div>
-        <div className="card" style={{ padding: 12 }}>
-          <div style={{ opacity: 0.7, fontSize: 12 }}>Fases pendentes</div>
-          <div style={{ fontSize: 26, fontWeight: 800 }}>{loading ? '—' : phases?.pendentes ?? 0}</div>
-        </div>
-        <div className="card" style={{ padding: 12 }}>
-          <div style={{ opacity: 0.7, fontSize: 12 }}>Fases finalizadas</div>
-          <div style={{ fontSize: 26, fontWeight: 800 }}>{loading ? '—' : phases?.finalizadas ?? 0}</div>
-        </div>
-      </section>
 
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
         <div className="card" style={{ padding: 12 }}>
           <div style={{ opacity: 0.7, fontSize: 12, marginBottom: 8 }}>Faturas</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

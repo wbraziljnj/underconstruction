@@ -18,6 +18,7 @@ type Documento = {
   dataInclusao: string;
   dataEntrega: string | null;
   status: 'ABERTO' | 'ANDAMENTO' | 'PENDENTE' | 'FINALIZADO';
+  pagamentoStatus: string;
   responsavelId: string | null;
   responsavelNome: string | null;
   notas: string | null;
@@ -30,7 +31,6 @@ type Documento = {
 type UserOption = { userId: string; nome: string; tipoUsuario: string; status: string };
 
 const DOC_STATUS = ['ABERTO', 'ANDAMENTO', 'PENDENTE', 'FINALIZADO'] as const;
-
 const PHASES: { fase: string; subfases: string[] }[] = [
   {
     fase: '01 - Estudo e Planejamento',
@@ -221,6 +221,22 @@ function getSubfasesByFase(fase: string) {
   return found ? found.subfases : [];
 }
 
+function statusColor(status: string) {
+  const s = status.toUpperCase();
+  if (s === 'ABERTO') return '#d4a000';
+  if (s === 'PENDENTE') return '#d64545';
+  if (s === 'FINALIZADO') return '#2f9e44';
+  return 'inherit';
+}
+
+function paymentColor(status: string) {
+  const s = status.toUpperCase();
+  if (s === 'ABERTO') return '#d4a000';
+  if (s === 'PENDENTE') return '#d64545';
+  if (s === 'PAGO') return '#2f9e44';
+  return 'inherit';
+}
+
 const schema = z.object({
   documento: z.string().min(1, 'Documento obrigatório'),
   fase: z.string().min(1, 'Fase obrigatória'),
@@ -231,6 +247,8 @@ const schema = z.object({
   data_entrega: z.string().optional(),
   status: z.enum(DOC_STATUS),
   responsavel_id: z.string().min(1, 'Responsável obrigatório'),
+  pagamento_status: z.enum(['ABERTO', 'PENDENTE', 'PAGO']),
+  assinatura: z.string().min(1, 'Assinatura obrigatória'),
   notas: z.string().optional(),
   arquivo_path: z.string().optional()
 });
@@ -276,11 +294,12 @@ export default function DocumentacoesPage() {
   const [users, setUsers] = useState<UserOption[]>([]);
   const [optionsError, setOptionsError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-const [subfasesOptions, setSubfasesOptions] = useState<string[]>([]);
+  const [subfasesOptions, setSubfasesOptions] = useState<string[]>([]);
 
   const [q, setQ] = useState('');
   const [faseFilter, setFaseFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [searchReadOnly, setSearchReadOnly] = useState(true);
 
   const defaults = useMemo<FormValues>(
     () => ({
@@ -293,6 +312,8 @@ const [subfasesOptions, setSubfasesOptions] = useState<string[]>([]);
       data_entrega: '',
       status: 'ABERTO',
       responsavel_id: '',
+      pagamento_status: 'PENDENTE',
+      assinatura: 'Sem Assinatura',
       notas: '',
       arquivo_path: ''
     }),
@@ -301,6 +322,10 @@ const [subfasesOptions, setSubfasesOptions] = useState<string[]>([]);
 
   const form = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: defaults });
   const selectedFase = form.watch('fase');
+  const sortedUsers = useMemo(
+    () => [...users].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')),
+    [users]
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -358,6 +383,8 @@ const [subfasesOptions, setSubfasesOptions] = useState<string[]>([]);
   }, [open, user?.activeCode]);
 
   function openCreate() {
+    setQ('');
+    setSearchReadOnly(true);
     setMode('create');
     setEditing(null);
     setSelectedFile(null);
@@ -367,6 +394,8 @@ const [subfasesOptions, setSubfasesOptions] = useState<string[]>([]);
   }
 
   function openEdit(row: Documento) {
+    setQ('');
+    setSearchReadOnly(true);
     setMode('edit');
     setEditing(row);
     setSelectedFile(null);
@@ -380,7 +409,9 @@ const [subfasesOptions, setSubfasesOptions] = useState<string[]>([]);
       data_inclusao: row.dataInclusao ? row.dataInclusao.slice(0, 10) : '',
       data_entrega: row.dataEntrega ? row.dataEntrega.slice(0, 10) : '',
       status: row.status,
-      responsavel_id: row.responsavelId ? String(row.responsavelId) : '',
+      responsavel_id: row.responsavelId || '',
+      pagamento_status: row.pagamentoStatus || 'PENDENTE',
+      assinatura: row.assinatura || 'Sem Assinatura',
       notas: row.notas || '',
       arquivo_path: row.arquivoPath || ''
     });
@@ -402,6 +433,15 @@ const [subfasesOptions, setSubfasesOptions] = useState<string[]>([]);
       <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 10 }}>
         <input
           className="input"
+          type="search"
+          name="uc-doc-search-off"
+          inputMode="search"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          readOnly={searchReadOnly}
+          onFocus={() => setSearchReadOnly(false)}
           placeholder="Buscar (documento, fase, subfase, responsável)"
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -435,6 +475,7 @@ const [subfasesOptions, setSubfasesOptions] = useState<string[]>([]);
               <th style={{ padding: 10 }}>Fase</th>
               <th style={{ padding: 10 }}>Subfase</th>
               <th style={{ padding: 10 }}>Valor</th>
+              <th style={{ padding: 10 }}>Pagamento</th>
               <th style={{ padding: 10 }}>Status</th>
               <th style={{ padding: 10 }}>Responsável</th>
               <th style={{ padding: 10 }}>Inclusão</th>
@@ -471,7 +512,10 @@ const [subfasesOptions, setSubfasesOptions] = useState<string[]>([]);
                   <td style={{ padding: 10 }}>
                     {Number(r.valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </td>
-                  <td style={{ padding: 10 }}>{r.status}</td>
+                  <td style={{ padding: 10, color: paymentColor(r.pagamentoStatus || '') }}>
+                    {r.pagamentoStatus || '-'}
+                  </td>
+                  <td style={{ padding: 10, color: statusColor(r.status) }}>{r.status}</td>
                   <td style={{ padding: 10 }}>{r.responsavelNome || '-'}</td>
                   <td style={{ padding: 10 }}>{formatBrDate(r.dataInclusao)}</td>
                   <td style={{ padding: 10 }}>{formatBrDate(r.dataEntrega)}</td>
@@ -557,7 +601,13 @@ const [subfasesOptions, setSubfasesOptions] = useState<string[]>([]);
                     arquivoPath = uploaded.path || uploaded.url || uploaded.filename || '';
                   }
 
-                  const payload = { ...values, arquivo_path: arquivoPath || undefined, password };
+                  const payload = {
+                    ...values,
+                    pagamento_status: values.pagamento_status || 'PENDENTE',
+                    assinatura: values.assinatura || 'Sem Assinatura',
+                    arquivo_path: arquivoPath || undefined,
+                    password
+                  };
 
                   if (mode === 'edit' && editing?.docsId) {
                     await apiFetch(`/documentacoes/${editing.docsId}`, { method: 'PUT', json: payload });
@@ -588,6 +638,7 @@ const [subfasesOptions, setSubfasesOptions] = useState<string[]>([]);
 
         <form
           onSubmit={(e) => e.preventDefault()}
+          autoComplete="off"
           style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}
         >
           <label style={{ gridColumn: '1 / -1' }}>
@@ -658,15 +709,58 @@ const [subfasesOptions, setSubfasesOptions] = useState<string[]>([]);
           </label>
 
           <label>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>Responsável</div>
-            <select className="input" {...form.register('responsavel_id')} defaultValue="">
-              <option value="">Selecione...</option>
-              {users.map((u) => (
-                <option key={u.userId} value={u.userId}>
-                  {u.nome}
-                </option>
-              ))}
+            <div style={{ fontSize: 12, opacity: 0.8 }}>Pagamento status</div>
+            <select className="input" {...form.register('pagamento_status')}>
+              <option value="ABERTO">Aberto</option>
+              <option value="PENDENTE">Pendente</option>
+              <option value="PAGO">Pago</option>
             </select>
+            {form.formState.errors.pagamento_status ? (
+              <div style={{ color: 'var(--danger)', fontSize: 12 }}>
+                {form.formState.errors.pagamento_status.message}
+              </div>
+            ) : null}
+          </label>
+
+          <label>
+            <div style={{ fontSize: 12, opacity: 0.8 }}>Assinatura</div>
+            <select className="input" {...form.register('assinatura')}>
+              <option value="Sem Assinatura">Sem Assinatura</option>
+              <option value="Assinatura Digital">Assinatura Digital</option>
+              <option value="Assinatura Gov">Assinatura Gov</option>
+              <option value="Assinatura Cartorio">Assinatura Cartorio</option>
+            </select>
+            {form.formState.errors.assinatura ? (
+              <div style={{ color: 'var(--danger)', fontSize: 12 }}>
+                {form.formState.errors.assinatura.message}
+              </div>
+            ) : null}
+          </label>
+
+          <label>
+            <div style={{ fontSize: 12, opacity: 0.8 }}>Responsável</div>
+            {(() => {
+              const reg = form.register('responsavel_id');
+              const value = form.watch('responsavel_id') || '';
+              return (
+                <select
+                  className="input"
+                  {...reg}
+                  value={value}
+                  onChange={(e) => {
+                    reg.onChange(e);
+                    form.setValue('responsavel_id', e.target.value, { shouldValidate: true });
+                  }}
+                >
+                  <option value="">Selecione...</option>
+                  {sortedUsers.map((u) => (
+                    <option key={u.userId} value={u.userId}>
+                      {u.nome}
+                    </option>
+                  ))}
+                </select>
+              );
+            })()}
             {form.formState.errors.responsavel_id ? (
               <div style={{ color: 'var(--danger)', fontSize: 12 }}>
                 {form.formState.errors.responsavel_id.message}
@@ -740,4 +834,3 @@ const [subfasesOptions, setSubfasesOptions] = useState<string[]>([]);
     </div>
   );
 }
-

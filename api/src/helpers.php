@@ -27,17 +27,77 @@ function parse_json_body(): array
 function fetch_all(string $query, array $params = []): array
 {
     $pdo = Database::connection();
-    $stmt = $pdo->prepare($query);
-    $stmt->execute($params);
-    return $stmt->fetchAll();
+    $debug = filter_var(getenv('APP_DEBUG'), FILTER_VALIDATE_BOOL);
+    $logSql = $debug && filter_var(getenv('LOG_SQL'), FILTER_VALIDATE_BOOL);
+    $start = microtime(true);
+    try {
+        $stmt = $pdo->prepare($query);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
+        if ($logSql) {
+            \UC\Logger::info('db_query', [
+                'service' => 'api',
+                'context' => [
+                    'query' => $query,
+                    'duration_ms' => round((microtime(true) - $start) * 1000, 2),
+                ],
+            ]);
+        }
+        return $rows;
+    } catch (Throwable $e) {
+        if ($logSql) {
+            \UC\Logger::error('db_exception', [
+                'service' => 'api',
+                'context' => [
+                    'query' => $query,
+                    'duration_ms' => round((microtime(true) - $start) * 1000, 2),
+                ],
+                'error' => [
+                    'type' => get_class($e),
+                    'message' => $e->getMessage(),
+                ],
+            ]);
+        }
+        throw $e;
+    }
 }
 
 function fetch_one(string $query, array $params = []): array|false
 {
     $pdo = Database::connection();
-    $stmt = $pdo->prepare($query);
-    $stmt->execute($params);
-    return $stmt->fetch();
+    $debug = filter_var(getenv('APP_DEBUG'), FILTER_VALIDATE_BOOL);
+    $logSql = $debug && filter_var(getenv('LOG_SQL'), FILTER_VALIDATE_BOOL);
+    $start = microtime(true);
+    try {
+        $stmt = $pdo->prepare($query);
+        $stmt->execute($params);
+        $row = $stmt->fetch();
+        if ($logSql) {
+            \UC\Logger::info('db_query', [
+                'service' => 'api',
+                'context' => [
+                    'query' => $query,
+                    'duration_ms' => round((microtime(true) - $start) * 1000, 2),
+                ],
+            ]);
+        }
+        return $row;
+    } catch (Throwable $e) {
+        if ($logSql) {
+            \UC\Logger::error('db_exception', [
+                'service' => 'api',
+                'context' => [
+                    'query' => $query,
+                    'duration_ms' => round((microtime(true) - $start) * 1000, 2),
+                ],
+                'error' => [
+                    'type' => get_class($e),
+                    'message' => $e->getMessage(),
+                ],
+            ]);
+        }
+        throw $e;
+    }
 }
 
 function start_session_if_needed(): void
@@ -59,6 +119,22 @@ function require_authenticated_user_id(): string
         exit;
     }
     return trim($userId);
+}
+
+function require_password_confirmation(array $payload): void
+{
+    // Confirma a senha do usuário logado para operações sensíveis (create/update/delete).
+    $userId = require_authenticated_user_id();
+    $password = is_string($payload['password'] ?? null) ? (string)$payload['password'] : '';
+    if (trim($password) === '') {
+        fail_validation('password', 'Senha obrigatória', 403);
+    }
+
+    $row = fetch_one('SELECT password_hash FROM uc_users WHERE user_id = ? LIMIT 1', [(int)$userId]);
+    $hash = $row ? (string)($row['password_hash'] ?? '') : '';
+    if ($hash === '' || !password_verify($password, $hash)) {
+        fail_validation('password', 'Senha inválida', 403);
+    }
 }
 
 function get_active_obra_codigo(): ?string
