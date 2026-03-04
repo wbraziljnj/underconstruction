@@ -3,6 +3,7 @@ import { apiFetch } from '../api/client';
 import { useAuth } from '../auth/auth';
 import { useNavigate } from 'react-router-dom';
 import { getPhaseIcon } from '../ui/phaseIcons';
+import Modal from '../ui/Modal';
 
 type Summary = {
   activeCode: string;
@@ -39,6 +40,23 @@ type TimelineItem = {
   docsCount: number;
 };
 
+type FaturaResumo = {
+  faturaId: string;
+  descricao?: string;
+  valor?: string;
+  pagamento?: string;
+  status?: string;
+};
+
+type DocumentoResumo = {
+  docsId: number;
+  documento: string;
+  pagamentoStatus?: string;
+  status?: string;
+  valor?: string;
+  responsavelNome?: string | null;
+};
+
 function formatBrDate(value?: string | null) {
   if (!value) return '';
   const d = new Date(value);
@@ -57,6 +75,20 @@ function statusStyle(status: string) {
   return { label: status || '—', bg: 'rgba(255,255,255,0.06)', bd: 'rgba(255,255,255,0.12)', fg: 'inherit' };
 }
 
+function paymentColor(status: string) {
+  const s = (status || '').toUpperCase();
+  if (s === 'ABERTO') return '#d4a000';
+  if (s === 'PENDENTE') return '#d64545';
+  if (s === 'PAGO') return '#2f9e44';
+  return 'inherit';
+}
+
+function formatCurrency(value: any) {
+  const num = Number(value);
+  if (Number.isFinite(num)) return num.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  return value ?? '-';
+}
+
 export default function HomePage() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -66,6 +98,11 @@ export default function HomePage() {
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [timelineLoading, setTimelineLoading] = useState(true);
   const [timelineError, setTimelineError] = useState<string | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalLoading, setModalLoading] = useState(false);
+  const [modalFaturas, setModalFaturas] = useState<FaturaResumo[]>([]);
+  const [modalDocs, setModalDocs] = useState<DocumentoResumo[]>([]);
+  const [selected, setSelected] = useState<TimelineItem | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -119,6 +156,52 @@ export default function HomePage() {
   const timelineRows = timeline || [];
   const hasTimeline = timelineRows.length > 0;
   const timelineTitle = useMemo(() => (hasTimeline ? 'Timeline da obra' : 'Timeline'), [hasTimeline]);
+
+  async function openDetails(item: TimelineItem) {
+    setSelected(item);
+    setModalOpen(true);
+    setModalLoading(true);
+    setModalFaturas([]);
+    setModalDocs([]);
+    try {
+      const [fRes, dRes] = await Promise.all([
+        apiFetch<{ items: any[] }>(`/faturas?fase_id=${encodeURIComponent(item.faseId)}`, { method: 'GET' }).catch(() => ({ items: [] })),
+        apiFetch<{ items: any[] }>(`/documentacoes?fase=${encodeURIComponent(item.fase)}`, { method: 'GET' }).catch(() => ({ items: [] }))
+      ]);
+      const faturasResumo: FaturaResumo[] = (fRes.items || []).map((f: any) => ({
+        faturaId: String(f.faturaId || f.fatura_id || f.id || ''),
+        descricao: f.descricao || f.titulo || f.nome || '',
+        valor: f.valor ?? f.total ?? '',
+        total: f.total ?? '',
+        quantidade: f.quantidade ?? f.qtd ?? '',
+        pagamento: f.pagamento || '',
+        status: f.status || '',
+        fase: f.faseNome || f.fase || '',
+        responsavel: f.responsavelNome || '',
+        empresa: f.empresaNome || '',
+        vencimento: f.dataVencimento || f.vencimento || f.data_vencimento || ''
+      }));
+      const docsResumo: DocumentoResumo[] = (dRes.items || []).map((d: any) => ({
+        docsId: Number(d.docsId || d.docs_id || 0),
+        documento: d.documento || '',
+        pagamentoStatus: d.pagamentoStatus || d.pagamento_status || '',
+        status: d.status || '',
+        valor: d.valor ?? '',
+        fase: d.fase || '',
+        subfase: d.subfase || '',
+        responsavelNome: d.responsavelNome ?? d.responsavel_nome ?? null,
+        tipoAssinatura: d.tipoAssinatura || d.tipo_assinatura || '',
+        assinaturaNome: d.assinaturaNome || d.assinatura_nome || '',
+        dataInclusao: d.dataInclusao || d.data_inclusao || '',
+        dataEntrega: d.dataEntrega || d.data_entrega || '',
+        notas: d.notas || ''
+      }));
+      setModalFaturas(faturasResumo);
+      setModalDocs(docsResumo);
+    } finally {
+      setModalLoading(false);
+    }
+  }
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
@@ -301,24 +384,28 @@ export default function HomePage() {
         </div>
 
         <style>{`
-          .uc-timeline{ position:relative; padding: 14px 0; }
-          .uc-timeline::before{ content:""; position:absolute; left:50%; top:10px; bottom:10px; width:2px; transform:translateX(-50%); background:rgba(255,255,255,0.14); }
+          .uc-timeline{ position:relative; padding: 14px 0; --uc-line: rgba(255,255,255,0.14); --uc-card-bg: rgba(255,255,255,0.04); --uc-card-bd: rgba(255,255,255,0.10); --uc-dot-bd: rgba(255,255,255,0.16); --uc-chip-bg: rgba(255,255,255,0.05); --uc-chip-bd: rgba(255,255,255,0.10); }
+          @media (prefers-color-scheme: light){
+            /* Linha em azul escuro no modo claro */
+            .uc-timeline{ --uc-line: rgba(10, 52, 89, 0.65); --uc-card-bg: rgba(0,0,0,0.02); --uc-card-bd: rgba(0,0,0,0.10); --uc-dot-bd: rgba(0,0,0,0.14); --uc-chip-bg: rgba(0,0,0,0.04); --uc-chip-bd: rgba(0,0,0,0.08); }
+          }
+          .uc-timeline::before{ content:""; position:absolute; left:50%; top:10px; bottom:10px; width:2px; transform:translateX(-50%); background:var(--uc-line); }
           /* Mantém a bolinha exatamente no centro vertical do card do lado. */
           .uc-tl-item{ position:relative; display:grid; grid-template-columns: 1fr 64px 1fr; align-items:stretch; margin: 14px 0; }
           .uc-tl-item:nth-child(odd) .uc-tl-card{ grid-column: 1 / 2; justify-self:end; }
           .uc-tl-item:nth-child(even) .uc-tl-card{ grid-column: 3 / 4; justify-self:start; }
           /* Garante que a bolinha sempre alinhe no centro vertical do retângulo (lado esquerdo/direito) */
           .uc-tl-center{ position:absolute; left:50%; top:50%; transform:translate(-50%, -50%); display:flex; pointer-events:none; }
-          .uc-tl-dot{ width:44px; height:44px; margin:auto; border-radius:999px; display:flex; align-items:center; justify-content:center; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.16); box-shadow: 0 8px 22px rgba(0,0,0,0.15); }
+          .uc-tl-dot{ width:44px; height:44px; margin:auto; border-radius:999px; display:flex; align-items:center; justify-content:center; background: rgba(255,255,255,0.07); border: 1px solid var(--uc-dot-bd); box-shadow: 0 8px 22px rgba(0,0,0,0.15); }
           .uc-tl-card{ width:min(520px, 44vw); align-self:stretch; display:flex; }
           .uc-tl-card-inner{ width:100%; }
-          .uc-tl-card-inner{ padding: 14px; border-radius: 12px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10); box-shadow: 0 10px 26px rgba(0,0,0,0.14); }
+          .uc-tl-card-inner{ padding: 14px; border-radius: 12px; background: var(--uc-card-bg); border: 1px solid var(--uc-card-bd); box-shadow: 0 10px 26px rgba(0,0,0,0.14); }
           .uc-tl-top{ display:flex; justify-content:space-between; gap:10px; align-items:flex-start; }
           .uc-tl-title{ font-weight: 800; font-size: 14px; }
           .uc-tl-sub{ opacity: 0.75; font-size: 12px; margin-top: 2px; }
           .uc-tl-date{ opacity: 0.8; font-size: 12px; white-space:nowrap; }
           .uc-tl-body{ margin-top: 10px; display:flex; flex-wrap:wrap; gap:8px; }
-          .uc-chip{ display:inline-flex; align-items:center; gap:6px; padding: 6px 10px; border-radius:999px; font-size:12px; opacity:0.95; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.10); }
+          .uc-chip{ display:inline-flex; align-items:center; gap:6px; padding: 6px 10px; border-radius:999px; font-size:12px; opacity:0.95; background: var(--uc-chip-bg); border: 1px solid var(--uc-chip-bd); }
           .uc-tl-footer{ margin-top: 12px; display:flex; justify-content:space-between; gap:10px; align-items:center; }
           .uc-tl-resp{ opacity:0.85; font-size: 12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width: 55%; }
           @media (max-width: 860px){
@@ -376,9 +463,9 @@ export default function HomePage() {
                       </div>
 
                       <div className="uc-tl-footer">
-                        <button className="btn" type="button" onClick={() => navigate('/fases')}>
-                          Ver
-                        </button>
+                    <button className="btn" type="button" onClick={() => openDetails(t)}>
+                      Ver
+                    </button>
                         <div className="uc-tl-resp">
                           <span style={{ opacity: 0.75 }}>Responsável:</span>{' '}
                           <b>{t.responsavelNome || '—'}</b>
@@ -387,7 +474,11 @@ export default function HomePage() {
                     </div>
                   </div>
                   <div className="uc-tl-center">
-                    <div className="uc-tl-dot" title={t.fase}>
+                    <div
+                      className="uc-tl-dot"
+                      title={t.fase}
+                      style={{ background: statusStyle(t.status).bg, borderColor: statusStyle(t.status).bd, color: statusStyle(t.status).fg }}
+                    >
                       {getPhaseIcon(t.fase)}
                     </div>
                   </div>
@@ -397,6 +488,126 @@ export default function HomePage() {
           </div>
         )}
       </section>
+
+      <Modal open={modalOpen} title="Detalhes da fase" onClose={() => setModalOpen(false)} footer={null}>
+        {selected ? (
+          <div style={{ display: 'grid', gap: 12 }}>
+            <div className="card" style={{ padding: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                <div style={{ fontWeight: 800 }}>{selected.fase}</div>
+                <span style={{ fontSize: 12, padding: '4px 10px', borderRadius: 999, background: statusStyle(selected.status).bg, border: `1px solid ${statusStyle(selected.status).bd}`, color: statusStyle(selected.status).fg }}>
+                  {statusStyle(selected.status).label}
+                </span>
+              </div>
+              <div style={{ opacity: 0.8, marginTop: 4 }}>{selected.subfase || '—'}</div>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 12, marginTop: 8 }}>
+                <span>Início: <b>{formatBrDate(selected.dataInicio)}</b></span>
+                <span>Previsão: <b>{formatBrDate(selected.previsaoFinalizacao)}</b></span>
+                <span>Finalização: <b>{formatBrDate(selected.dataFinalizacao)}</b></span>
+              </div>
+              <div style={{ marginTop: 8, fontSize: 12 }}>
+                <span style={{ opacity: 0.8 }}>Responsável: </span>
+                <b>{selected.responsavelNome || '—'}</b>
+              </div>
+              <div style={{ marginTop: 8, fontSize: 12, display: 'flex', gap: 8 }}>
+                <span style={{ opacity: 0.8 }}>Faturas:</span>
+                <b>{selected.faturasCount}</b>
+                <span style={{ opacity: 0.8 }}>Documentos:</span>
+                <b>{selected.docsCount}</b>
+              </div>
+            </div>
+
+            <div className="card" style={{ padding: 12 }}>
+              <div style={{ fontWeight: 700, marginBottom: 8 }}>Faturas</div>
+              {modalLoading ? (
+                <div style={{ opacity: 0.7, fontSize: 12 }}>Carregando faturas...</div>
+              ) : modalFaturas.length === 0 ? (
+                <div style={{ opacity: 0.7, fontSize: 12 }}>Nenhuma fatura.</div>
+              ) : (
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {modalFaturas.map((f) => (
+                    <div key={f.faturaId} className="card" style={{ padding: 10, borderColor: 'var(--border)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                        <div style={{ fontWeight: 700 }}>{f.descricao || `Fatura ${f.faturaId}`}</div>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {f.pagamento ? (
+                            <span style={{ fontSize: 11, padding: '4px 8px', borderRadius: 999, background: 'rgba(255,193,7,0.14)', border: '1px solid rgba(255,193,7,0.28)', color: paymentColor((f.pagamento || '').toUpperCase()) }}>
+                              Pagamento: {f.pagamento}
+                            </span>
+                          ) : null}
+                          {f.status ? (
+                            <span style={{ fontSize: 11, padding: '4px 8px', borderRadius: 999, background: statusStyle(f.status).bg, border: `1px solid ${statusStyle(f.status).bd}`, color: statusStyle(f.status).fg }}>
+                              {statusStyle(f.status).label}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 12, opacity: 0.85, marginTop: 4 }}>{f.fase || '—'}</div>
+                      <div style={{ fontSize: 12, opacity: 0.8, marginTop: 6, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                        <span>Valor: <b>{formatCurrency(f.valor)}</b></span>
+                        {f.quantidade ? <span>Qtd: <b>{f.quantidade}</b></span> : null}
+                        {f.total ? <span>Total: <b>{formatCurrency(f.total)}</b></span> : null}
+                        {f.vencimento ? <span>Vencimento: <b>{formatBrDate(f.vencimento)}</b></span> : null}
+                      </div>
+                      <div style={{ fontSize: 12, opacity: 0.8, marginTop: 6, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                        {f.responsavel ? <span>Responsável: <b>{f.responsavel}</b></span> : null}
+                        {f.empresa ? <span>Empresa: <b>{f.empresa}</b></span> : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="card" style={{ padding: 12 }}>
+              <div style={{ fontWeight: 700, marginBottom: 8 }}>Documentos</div>
+              {modalLoading ? (
+                <div style={{ opacity: 0.7, fontSize: 12 }}>Carregando documentos...</div>
+              ) : modalDocs.length === 0 ? (
+                <div style={{ opacity: 0.7, fontSize: 12 }}>Nenhum documento.</div>
+              ) : (
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {modalDocs.map((d) => (
+                    <div key={d.docsId} className="card" style={{ padding: 10, borderColor: 'var(--border)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                        <div style={{ fontWeight: 700 }}>{d.documento}</div>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {d.pagamentoStatus ? (
+                            <span style={{ fontSize: 11, padding: '4px 8px', borderRadius: 999, background: 'rgba(255,193,7,0.14)', border: '1px solid rgba(255,193,7,0.28)', color: paymentColor((d.pagamentoStatus || '').toUpperCase()) }}>
+                              Pagamento: {d.pagamentoStatus}
+                            </span>
+                          ) : null}
+                          {d.status ? (
+                            <span style={{ fontSize: 11, padding: '4px 8px', borderRadius: 999, background: statusStyle(d.status).bg, border: `1px solid ${statusStyle(d.status).bd}`, color: statusStyle(d.status).fg }}>
+                              {statusStyle(d.status).label}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 12, opacity: 0.85, marginTop: 4 }}>{d.subfase || d.fase || '—'}</div>
+                      <div style={{ fontSize: 12, opacity: 0.8, marginTop: 6, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                        <span>Valor: <b>{formatCurrency(d.valor)}</b></span>
+                        {d.dataInclusao ? <span>Inclusão: <b>{formatBrDate(d.dataInclusao)}</b></span> : null}
+                        {d.dataEntrega ? <span>Entrega: <b>{formatBrDate(d.dataEntrega)}</b></span> : null}
+                      </div>
+                      <div style={{ fontSize: 12, opacity: 0.8, marginTop: 6, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                        {d.tipoAssinatura ? <span>Tipo assinatura: <b>{d.tipoAssinatura}</b></span> : null}
+                        {d.assinaturaNome ? <span>Assinatura: <b>{d.assinaturaNome}</b></span> : null}
+                        <span>Responsável: <b>{d.responsavelNome || '—'}</b></span>
+                      </div>
+                      {d.notas ? (
+                        <div style={{ fontSize: 12, opacity: 0.75, marginTop: 6 }}>
+                          Notas: {d.notas}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : null}
+      </Modal>
     </div>
   );
 }

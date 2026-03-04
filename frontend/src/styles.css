@@ -28,6 +28,7 @@ body {
   background-attachment: fixed;
   background-size: cover;
   color: var(--text);
+  overflow-x: hidden;
 }
 
 body[data-theme='light'] {
@@ -108,4 +109,26 @@ textarea {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
+}
+
+@media (max-width: 640px) {
+  body {
+    padding: 0 10px;
+  }
+  .card {
+    width: 100%;
+    max-width: 100%;
+  }
+  /* Timeline mobile: elimina qualquer overflow lateral */
+  .uc-timeline {
+    padding-left: 6px !important;
+    padding-right: 6px !important;
+    overflow-x: hidden;
+  }
+  .uc-tl-item {
+    grid-template-columns: 44px 1fr !important;
+  }
+  .uc-tl-card {
+    width: 100% !important;
+  }
 }
