@@ -418,6 +418,19 @@ $FASES_FIXAS = [
 
 $DOC_STATUS = ['ABERTO', 'ANDAMENTO', 'PENDENTE', 'FINALIZADO'];
 
+function uc_public_api_url_for_path(?string $path): ?string
+{
+    if ($path === null) return null;
+    $p = trim($path);
+    if ($p === '') return null;
+    // Já é URL absoluta ou caminho absoluto
+    if (preg_match('#^https?://#i', $p) === 1) return $p;
+    if (str_starts_with($p, '/')) return $p;
+
+    $scriptDir = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/');
+    return $scriptDir . '/' . ltrim($p, '/');
+}
+
 function require_obra_cadastrada(): void
 {
     $codigo = require_active_obra_codigo();
@@ -490,7 +503,7 @@ if ($relativePath === '/upload-foto' && $method === 'POST') {
         exit;
     }
 
-    $publicPath = '/api/uploads/' . $filename;
+    $publicPath = uc_public_api_url_for_path('uploads/' . $filename);
     json_response([
         'filename' => $filename,
         'path' => 'uploads/' . $filename,
@@ -578,7 +591,7 @@ if ($relativePath === '/upload-documento' && $method === 'POST') {
         exit;
     }
 
-    $publicPath = '/api/uploads/' . $filename;
+    $publicPath = uc_public_api_url_for_path('uploads/' . $filename);
     json_response([
         'filename' => $filename,
         'path' => 'uploads/' . $filename,
@@ -599,13 +612,19 @@ if ($relativePath === '/login' && $method === 'POST') {
         exit;
     }
 
-    $user = fetch_one('SELECT * FROM uc_users WHERE LOWER(email) = ? LIMIT 1', [strtolower($email)]);
-    if (!$user) {
+    // Sempre autentica pelo cadastro principal (menor user_id) desse email.
+    $principal = fetch_one('SELECT * FROM uc_users WHERE LOWER(email) = ? ORDER BY user_id ASC LIMIT 1', [strtolower($email)]);
+    if (!$principal) {
         json_response(['detail' => 'Credenciais inválidas.'], 401);
         exit;
     }
 
-    $stored = (string)($user['password_hash'] ?? '');
+    $principalId = (int)($principal['id_principal'] ?? 0);
+    if ($principalId <= 0) {
+        $principalId = (int)$principal['user_id'];
+    }
+
+    $stored = (string)($principal['password_hash'] ?? '');
     if ($stored === '') {
         json_response(['detail' => 'Credenciais inválidas.'], 401);
         exit;
@@ -634,7 +653,7 @@ if ($relativePath === '/login' && $method === 'POST') {
             try {
                 $pdo = Database::connection();
                 $stmt = $pdo->prepare('UPDATE uc_users SET password_hash = ?, updated_at = updated_at WHERE user_id = ?');
-                $stmt->execute([$newHash, (string)$user['user_id']]);
+                $stmt->execute([$newHash, (string)$principal['user_id']]);
             } catch (Throwable $e) {
                 error_log('[UC] password upgrade failed: ' . $e->getMessage());
             }
@@ -646,25 +665,56 @@ if ($relativePath === '/login' && $method === 'POST') {
         exit;
     }
 
-    $_SESSION['uc_user_id'] = (string)$user['user_id'];
-    $codes = parse_user_codes_from_db($user['code'] ?? '');
-    // Se Owner, substitui por todas as obras existentes
-    if ((string)($user['tipo_usuario'] ?? '') === 'Owner') {
+    // Busca todos registros desse usuário (mesmo id_principal).
+    $groupUsers = fetch_all(
+        'SELECT * FROM uc_users WHERE id_principal = ? OR user_id = ? ORDER BY user_id ASC',
+        [$principalId, $principalId]
+    );
+    if (!$groupUsers) {
+        json_response(['detail' => 'Credenciais inválidas.'], 401);
+        exit;
+    }
+
+    // Codes acessíveis = união dos codes de todos os registros do grupo (ou todas se Owner).
+    $codes = [];
+    foreach ($groupUsers as $gu) {
+        $codes = array_merge($codes, parse_user_codes_from_db($gu['code'] ?? ''));
+    }
+
+    $isOwner = (string)($principal['tipo_usuario'] ?? '') === 'Owner';
+    if ($isOwner) {
         $rows = fetch_all('SELECT codigo FROM uc_obra');
-        $codes = array_values(array_unique(array_map(fn($r) => (string)$r['codigo'], $rows)));
+        $codes = array_merge($codes, array_map(fn($r) => (string)$r['codigo'], $rows));
     }
     $_SESSION['uc_codes'] = $codes;
     $active = $_SESSION['uc_active_code'] ?? null;
+    // Define active code pela ordem alfabética se não houver um válido
+    $codesSorted = $codes;
+    sort($codesSorted, SORT_NATURAL | SORT_FLAG_CASE);
     if (!is_string($active) || !in_array($active, $codes, true)) {
-        $_SESSION['uc_active_code'] = $codes[0] ?? null;
+        $_SESSION['uc_active_code'] = $codesSorted[0] ?? null;
     }
 
+    // Determina o registro ativo (o que tem o code do active); se não achar, usa o principal.
+    $activeUser = $principal;
+    foreach ($groupUsers as $gu) {
+        $userCodes = parse_user_codes_from_db($gu['code'] ?? '');
+        if (in_array($_SESSION['uc_active_code'], $userCodes, true)) {
+            $activeUser = $gu;
+            break;
+        }
+    }
+
+    $_SESSION['uc_user_id_principal'] = (string)$principalId;
+    $_SESSION['uc_user_id'] = (string)$activeUser['user_id'];
+
     json_response([
-        'userId' => (string)$user['user_id'],
-        'nome' => (string)$user['nome'],
-        'email' => (string)$user['email'],
-        'tipoUsuario' => (string)$user['tipo_usuario'],
-        'codes' => $codes,
+        'userId' => (string)$activeUser['user_id'],
+        'principalId' => (string)$principalId,
+        'nome' => (string)$activeUser['nome'],
+        'email' => (string)$principal['email'],
+        'tipoUsuario' => (string)$activeUser['tipo_usuario'],
+        'codes' => array_values(array_unique($codes)),
         'activeCode' => $_SESSION['uc_active_code'] ?? null,
     ]);
     exit;
@@ -789,6 +839,38 @@ if ($relativePath === '/cadastros/options' && $method === 'GET') {
         'status' => (string)$r['status'],
     ], $rows);
     json_response($options);
+    exit;
+}
+
+if ($relativePath === '/cadastros/lookup' && $method === 'GET') {
+    require_authenticated_user_id();
+    $email = trim((string)($_GET['email'] ?? ''));
+    if ($email === '') {
+        json_response(null);
+        exit;
+    }
+    $principal = fetch_one('SELECT * FROM uc_users WHERE LOWER(email) = ? ORDER BY user_id ASC LIMIT 1', [strtolower($email)]);
+    if (!$principal) {
+        json_response(null);
+        exit;
+    }
+    $principalId = (int)($principal['id_principal'] ?? 0);
+    if ($principalId <= 0) {
+        $principalId = (int)$principal['user_id'];
+    }
+    json_response([
+        'userId' => (string)$principal['user_id'],
+        'idPrincipal' => (string)$principalId,
+        'nome' => (string)$principal['nome'],
+        'cpfCnpj' => (string)$principal['cpf_cnpj'],
+        'telefone' => (string)$principal['telefone'],
+        'endereco' => (string)$principal['endereco'],
+        'email' => (string)$principal['email'],
+        'tipoUsuario' => (string)$principal['tipo_usuario'],
+        'status' => (string)$principal['status'],
+        'notas' => $principal['notas'] !== null ? (string)$principal['notas'] : '',
+        'foto' => $principal['foto'] !== null ? (string)$principal['foto'] : '',
+    ]);
     exit;
 }
 
@@ -960,6 +1042,25 @@ if ($relativePath === '/home/summary' && $method === 'GET') {
     );
     $usuariosTotal = $userRow ? (int)($userRow['c'] ?? 0) : 0;
 
+    $docsCountsRows = fetch_all(
+        'SELECT status, COUNT(*) AS c
+         FROM uc_documentacoes
+         WHERE ' . uc_code_predicate_for_table('uc_documentacoes', 'code') . '
+         GROUP BY status',
+        [$code]
+    );
+    $docsCounts = [
+        'ABERTO' => 0,
+        'PENDENTE' => 0,
+        'FINALIZADO' => 0,
+    ];
+    foreach ($docsCountsRows as $r) {
+        $st = strtoupper((string)($r['status'] ?? ''));
+        if ($st !== '' && array_key_exists($st, $docsCounts)) {
+            $docsCounts[$st] = (int)($r['c'] ?? 0);
+        }
+    }
+
     json_response([
         'activeCode' => $code,
         'fases' => [
@@ -969,8 +1070,59 @@ if ($relativePath === '/home/summary' && $method === 'GET') {
             'finalizadas' => $faseCounts['FINALIZADO'],
         ],
         'faturas' => $faturaCounts,
+        'documentos' => [
+            'aberto' => $docsCounts['ABERTO'],
+            'pendente' => $docsCounts['PENDENTE'],
+            'finalizado' => $docsCounts['FINALIZADO'],
+        ],
         'usuariosTotal' => $usuariosTotal,
     ]);
+    exit;
+}
+
+if ($relativePath === '/home/timeline' && $method === 'GET') {
+    require_authenticated_user_id();
+    $code = require_active_obra_codigo();
+
+    $sql = 'SELECT f.fase_id, f.fase, f.subfase, f.status, f.data_inicio, f.previsao_finalizacao, f.data_finalizacao,
+                   f.responsavel_id, u.nome AS responsavel_nome,
+                   COUNT(DISTINCT ft.fatura_id) AS faturas_count,
+                   COUNT(DISTINCT d.docs_id) AS docs_count
+            FROM uc_fases f
+            LEFT JOIN uc_users u ON u.user_id = f.responsavel_id AND ' . uc_users_code_predicate('u.code') . '
+            LEFT JOIN uc_faturas ft ON ft.fase_id = f.fase_id AND ' . uc_code_predicate_for_table('uc_faturas', 'ft.code') . '
+            LEFT JOIN uc_documentacoes d ON (d.fase COLLATE utf8mb4_unicode_ci) = (f.fase COLLATE utf8mb4_unicode_ci) AND ' . uc_code_predicate_for_table('uc_documentacoes', 'd.code') . '
+            WHERE ' . uc_code_predicate_for_table('uc_fases', 'f.code') . '
+            GROUP BY f.fase_id, f.fase, f.subfase, f.status, f.data_inicio, f.previsao_finalizacao, f.data_finalizacao, f.responsavel_id, u.nome
+            ORDER BY
+                CAST(SUBSTRING_INDEX(f.fase, " ", 1) AS UNSIGNED) ASC,
+                CAST(SUBSTRING_INDEX(COALESCE(f.subfase, ""), ".", 1) AS UNSIGNED) ASC,
+                CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(COALESCE(f.subfase, ""), ".", -1), " ", 1) AS UNSIGNED) ASC,
+                f.data_inicio ASC,
+                f.fase_id ASC';
+    $params = [$code, $code, $code, $code];
+
+    try {
+        $rows = fetch_all($sql, $params);
+    } catch (Throwable $e) {
+        json_response(['detail' => 'Erro interno ao carregar timeline', 'error' => $e->getMessage()], 500);
+        exit;
+    }
+
+    $items = array_map(fn ($r) => [
+        'faseId' => (string)$r['fase_id'],
+        'fase' => (string)$r['fase'],
+        'subfase' => $r['subfase'] !== null ? (string)$r['subfase'] : null,
+        'status' => (string)($r['status'] ?? ''),
+        'dataInicio' => (string)$r['data_inicio'],
+        'previsaoFinalizacao' => (string)$r['previsao_finalizacao'],
+        'dataFinalizacao' => $r['data_finalizacao'] !== null ? (string)$r['data_finalizacao'] : null,
+        'responsavelId' => $r['responsavel_id'] !== null ? (string)$r['responsavel_id'] : null,
+        'responsavelNome' => $r['responsavel_nome'] !== null ? (string)$r['responsavel_nome'] : null,
+        'faturasCount' => (int)($r['faturas_count'] ?? 0),
+        'docsCount' => (int)($r['docs_count'] ?? 0),
+    ], $rows);
+    json_response(['items' => $items]);
     exit;
 }
 
@@ -984,12 +1136,13 @@ if ($relativePath === '/documentacoes' && $method === 'GET') {
     $subfase = trim((string)($_GET['subfase'] ?? ''));
 
     $sql = 'SELECT d.docs_id, d.documento, d.fase, d.subfase, d.valor, d.dados_pagamento, d.data_inclusao, d.data_entrega,
-                   d.status, d.pagamento_status, d.assinatura, d.responsavel_id, d.notas, d.arquivo_path, d.created_at, d.updated_at,
-                   u.nome AS responsavel_nome
+                   d.status, d.pagamento_status, d.tipo_assinatura, d.assinatura, d.responsavel_id, d.notas, d.arquivo_path, d.created_at, d.updated_at,
+                   u.nome AS responsavel_nome, ua.nome AS assinatura_nome
             FROM uc_documentacoes d
             LEFT JOIN uc_users u ON u.user_id = d.responsavel_id AND ' . uc_users_code_predicate('u.code') . '
+            LEFT JOIN uc_users ua ON ua.user_id = d.assinatura AND ' . uc_users_code_predicate('ua.code') . '
             WHERE ' . uc_code_predicate_for_table('uc_documentacoes', 'd.code');
-    $params = [$code, $code];
+    $params = [$code, $code, $code];
 
     if ($q !== '') {
         $sql .= ' AND (LOWER(d.documento) LIKE ? OR LOWER(d.fase) LIKE ? OR LOWER(d.subfase) LIKE ? OR LOWER(u.nome) LIKE ?)';
@@ -1030,12 +1183,14 @@ if ($relativePath === '/documentacoes' && $method === 'GET') {
         'dataEntrega' => $r['data_entrega'] !== null ? (string)$r['data_entrega'] : null,
         'status' => (string)$r['status'],
         'pagamentoStatus' => (string)$r['pagamento_status'],
+        'tipoAssinatura' => (string)$r['tipo_assinatura'],
         'assinatura' => (string)$r['assinatura'],
+        'assinaturaNome' => $r['assinatura_nome'] !== null ? (string)$r['assinatura_nome'] : null,
         'responsavelId' => $r['responsavel_id'] !== null ? (string)$r['responsavel_id'] : null,
         'responsavelNome' => $r['responsavel_nome'] !== null ? (string)$r['responsavel_nome'] : null,
         'notas' => $r['notas'] !== null ? (string)$r['notas'] : null,
         'arquivoPath' => $r['arquivo_path'] !== null ? (string)$r['arquivo_path'] : null,
-        'arquivoUrl' => $r['arquivo_path'] !== null ? '/api/' . ltrim((string)$r['arquivo_path'], '/') : null,
+        'arquivoUrl' => $r['arquivo_path'] !== null ? uc_public_api_url_for_path((string)$r['arquivo_path']) : null,
         'createdAt' => (string)$r['created_at'],
         'updatedAt' => (string)$r['updated_at'],
     ], $rows);
@@ -1073,15 +1228,20 @@ if ($relativePath === '/documentacoes' && $method === 'POST') {
         $pagamentoStatus = 'PENDENTE';
     }
 
-    $assinatura = trim((string)($payload['assinatura'] ?? ''));
-    if ($assinatura === '') {
-        $assinatura = 'Sem Assinatura';
+    $tipoAssinatura = trim((string)($payload['tipo_assinatura'] ?? ($payload['tipoAssinatura'] ?? '')));
+    if (!in_array($tipoAssinatura, ['Sem Assinatura', 'Assinatura Digital', 'Assinatura Gov', 'Assinatura Cartorio'], true)) {
+        $tipoAssinatura = 'Sem Assinatura';
+    }
+
+    $assinatura = optional_string($payload['assinatura'] ?? null);
+    if ($assinatura === null || $assinatura === '') {
+        fail_validation('assinatura', 'Assinatura obrigatória');
     }
 
     $valor = normalize_decimal($payload['valor'] ?? null, 'valor', 2, true);
     $dadosPagamento = optional_string($payload['dados_pagamento'] ?? ($payload['dadosPagamento'] ?? null));
     // `uc_documentacoes.notas` no banco está NOT NULL.
-    $notas = optional_string($payload['notas'] ?? null) ?? '';
+    $notas = optional_string($payload['notas'] ?? '') ?? '';
     $dataInclusao = parse_datetime_or_null($payload['data_inclusao'] ?? ($payload['dataInclusao'] ?? ''), 'data_inclusao', false) ?? now_datetime_ms();
     $dataEntrega = parse_datetime_or_null($payload['data_entrega'] ?? ($payload['dataEntrega'] ?? ''), 'data_entrega', false);
     $arquivoPath = optional_string($payload['arquivo_path'] ?? ($payload['arquivoPath'] ?? null));
@@ -1099,7 +1259,7 @@ if ($relativePath === '/documentacoes' && $method === 'POST') {
     $now = now_datetime_ms();
     $pdo = Database::connection();
     try {
-        $stmt = $pdo->prepare('INSERT INTO uc_documentacoes (documento, fase, subfase, valor, dados_pagamento, data_inclusao, data_entrega, status, pagamento_status, assinatura, responsavel_id, notas, arquivo_path, created_at, updated_at, code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    $stmt = $pdo->prepare('INSERT INTO uc_documentacoes (documento, fase, subfase, valor, dados_pagamento, data_inclusao, data_entrega, status, pagamento_status, tipo_assinatura, assinatura, responsavel_id, notas, arquivo_path, created_at, updated_at, code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         $stmt->execute([
             $documento,
             $fase,
@@ -1110,7 +1270,8 @@ if ($relativePath === '/documentacoes' && $method === 'POST') {
             $dataEntrega,
             $status,
             $pagamentoStatus,
-            $assinatura,
+        $tipoAssinatura,
+        $assinatura,
             $responsavelId,
             $notas,
             $arquivoPath,
@@ -1131,6 +1292,7 @@ if ($relativePath === '/documentacoes' && $method === 'POST') {
         'subfase' => $subfase,
         'status' => $status,
         'pagamentoStatus' => $pagamentoStatus,
+        'tipoAssinatura' => $tipoAssinatura,
         'assinatura' => $assinatura,
     ], 201);
     exit;
@@ -1176,15 +1338,26 @@ if (preg_match('#^/documentacoes/(\\d+)$#', $relativePath, $m) && $method === 'P
         $pagamentoStatus = 'PENDENTE';
     }
 
-    $assinatura = trim((string)($payload['assinatura'] ?? ''));
+    $tipoAssinatura = trim((string)($payload['tipo_assinatura'] ?? ($payload['tipoAssinatura'] ?? '')));
+    if ($tipoAssinatura === '') {
+        $tipoAssinatura = (string)($existing['tipo_assinatura'] ?? 'Sem Assinatura');
+    }
+    if (!in_array($tipoAssinatura, ['Sem Assinatura', 'Assinatura Digital', 'Assinatura Gov', 'Assinatura Cartorio'], true)) {
+        $tipoAssinatura = 'Sem Assinatura';
+    }
+
+    $assinatura = optional_string($payload['assinatura'] ?? null);
+    if ($assinatura === null || $assinatura === '') {
+        $assinatura = optional_string($existing['assinatura'] ?? '') ?? '';
+    }
     if ($assinatura === '') {
-        $assinatura = (string)($existing['assinatura'] ?? 'Sem Assinatura');
+        fail_validation('assinatura', 'Assinatura obrigatória');
     }
 
     $valor = normalize_decimal($payload['valor'] ?? null, 'valor', 2, true);
     $dadosPagamento = optional_string($payload['dados_pagamento'] ?? ($payload['dadosPagamento'] ?? null));
     // `uc_documentacoes.notas` no banco está NOT NULL.
-    $notas = optional_string($payload['notas'] ?? null) ?? '';
+    $notas = optional_string($payload['notas'] ?? '') ?? '';
     $dataInclusao = parse_datetime_or_null($payload['data_inclusao'] ?? ($payload['dataInclusao'] ?? ''), 'data_inclusao', false) ?? (string)($existing['data_inclusao'] ?? now_datetime_ms());
     $dataEntrega = parse_datetime_or_null($payload['data_entrega'] ?? ($payload['dataEntrega'] ?? ''), 'data_entrega', false);
     $arquivoPath = optional_string($payload['arquivo_path'] ?? ($payload['arquivoPath'] ?? null)) ?? ($existing['arquivo_path'] ?? null);
@@ -1201,7 +1374,7 @@ if (preg_match('#^/documentacoes/(\\d+)$#', $relativePath, $m) && $method === 'P
 
     $pdo = Database::connection();
     try {
-        $stmt = $pdo->prepare('UPDATE uc_documentacoes SET documento = ?, fase = ?, subfase = ?, valor = ?, dados_pagamento = ?, data_inclusao = ?, data_entrega = ?, status = ?, pagamento_status = ?, assinatura = ?, responsavel_id = ?, notas = ?, arquivo_path = ?, updated_at = ? WHERE docs_id = ? AND code = ?');
+    $stmt = $pdo->prepare('UPDATE uc_documentacoes SET documento = ?, fase = ?, subfase = ?, valor = ?, dados_pagamento = ?, data_inclusao = ?, data_entrega = ?, status = ?, pagamento_status = ?, tipo_assinatura = ?, assinatura = ?, responsavel_id = ?, notas = ?, arquivo_path = ?, updated_at = ? WHERE docs_id = ? AND code = ?');
         $stmt->execute([
             $documento,
             $fase,
@@ -1212,6 +1385,7 @@ if (preg_match('#^/documentacoes/(\\d+)$#', $relativePath, $m) && $method === 'P
             $dataEntrega,
             $status,
             $pagamentoStatus,
+        $tipoAssinatura,
             $assinatura,
             $responsavelId,
             $notas,
@@ -1227,10 +1401,11 @@ if (preg_match('#^/documentacoes/(\\d+)$#', $relativePath, $m) && $method === 'P
 
     $row = fetch_one(
         'SELECT d.docs_id, d.documento, d.fase, d.subfase, d.valor, d.dados_pagamento, d.data_inclusao, d.data_entrega,
-                d.status, d.pagamento_status, d.assinatura, d.responsavel_id, d.notas, d.arquivo_path, d.created_at, d.updated_at,
-                u.nome AS responsavel_nome
+                d.status, d.pagamento_status, d.tipo_assinatura, d.assinatura, d.responsavel_id, d.notas, d.arquivo_path, d.created_at, d.updated_at,
+                u.nome AS responsavel_nome, ua.nome AS assinatura_nome
          FROM uc_documentacoes d
          LEFT JOIN uc_users u ON u.user_id = d.responsavel_id
+         LEFT JOIN uc_users ua ON ua.user_id = d.assinatura
          WHERE d.docs_id = ? AND d.code = ?',
         [$docsId, $code]
     );
@@ -1245,12 +1420,14 @@ if (preg_match('#^/documentacoes/(\\d+)$#', $relativePath, $m) && $method === 'P
         'dataEntrega' => $row['data_entrega'] ?? $dataEntrega,
         'status' => $row['status'] ?? $status,
         'pagamentoStatus' => $row['pagamento_status'] ?? $pagamentoStatus,
+        'tipoAssinatura' => $row['tipo_assinatura'] ?? $tipoAssinatura,
         'assinatura' => $row['assinatura'] ?? $assinatura,
+        'assinaturaNome' => $row['assinatura_nome'] ?? null,
         'responsavelId' => $row['responsavel_id'] ?? $responsavelId,
         'responsavelNome' => $row['responsavel_nome'] ?? null,
         'notas' => $row['notas'] ?? $notas,
         'arquivoPath' => $row['arquivo_path'] ?? $arquivoPath,
-        'arquivoUrl' => ($row['arquivo_path'] ?? $arquivoPath) ? '/api/' . ltrim((string)($row['arquivo_path'] ?? $arquivoPath), '/') : null,
+        'arquivoUrl' => ($row['arquivo_path'] ?? $arquivoPath) ? uc_public_api_url_for_path((string)($row['arquivo_path'] ?? $arquivoPath)) : null,
         'createdAt' => $row['created_at'] ?? null,
         'updatedAt' => $row['updated_at'] ?? null,
     ]);
@@ -1438,40 +1615,61 @@ if ($relativePath === '/cadastros' && $method === 'POST') {
         }
     }
 
-    $nome = trim((string)($payload['nome'] ?? ''));
-    if ($nome === '') {
-        fail_validation('nome', 'Nome é obrigatório');
-    }
-    $cpfCnpj = trim((string)($payload['cpf_cnpj'] ?? ''));
-    if ($cpfCnpj === '') {
-        fail_validation('cpf_cnpj', 'CPF/CNPJ é obrigatório');
-    }
-    $telefone = trim((string)($payload['telefone'] ?? ''));
-    if ($telefone === '') {
-        fail_validation('telefone', 'Telefone é obrigatório');
-    }
-    $endereco = trim((string)($payload['endereco'] ?? ''));
-    if ($endereco === '') {
-        fail_validation('endereco', 'Endereço é obrigatório');
-    }
     $email = trim((string)($payload['email'] ?? ''));
     if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
         fail_validation('email', 'Email inválido');
     }
-    $status = (string)($payload['status'] ?? '');
-    if (!in_array($status, ['ATIVO', 'INATIVO'], true)) {
-        fail_validation('status', 'Status inválido');
+
+    // Localiza principal desse email (se existir)
+    $principal = fetch_one('SELECT * FROM uc_users WHERE LOWER(email) = ? ORDER BY user_id ASC LIMIT 1', [strtolower($email)]);
+    $principalId = $principal ? (int)($principal['id_principal'] ?? 0) : 0;
+    if ($principal && $principalId <= 0) {
+        $principalId = (int)$principal['user_id'];
     }
 
-    $foto = optional_string($payload['foto'] ?? null);
-    $notas = optional_string($payload['notas'] ?? null);
-    $resetSenha = (bool)($payload['reset_senha'] ?? false);
-
-    $passwordHash = password_hash('UnderConstruction', PASSWORD_DEFAULT);
+    // Se email já existe, travamos campos para usar dados do principal
+    if ($principal) {
+        $nome = (string)$principal['nome'];
+        $cpfCnpj = (string)$principal['cpf_cnpj'];
+        $telefone = (string)$principal['telefone'];
+        $endereco = (string)$principal['endereco'];
+        $status = (string)$principal['status'];
+        $foto = optional_string($principal['foto'] ?? null);
+        $notas = optional_string($payload['notas'] ?? null);
+        $passwordHash = (string)$principal['password_hash'];
+    } else {
+        $nome = trim((string)($payload['nome'] ?? ''));
+        if ($nome === '') {
+            fail_validation('nome', 'Nome é obrigatório');
+        }
+        $cpfCnpj = trim((string)($payload['cpf_cnpj'] ?? ''));
+        if ($cpfCnpj === '') {
+            fail_validation('cpf_cnpj', 'CPF/CNPJ é obrigatório');
+        }
+        $telefone = trim((string)($payload['telefone'] ?? ''));
+        if ($telefone === '') {
+            fail_validation('telefone', 'Telefone é obrigatório');
+        }
+        $endereco = trim((string)($payload['endereco'] ?? ''));
+        if ($endereco === '') {
+            fail_validation('endereco', 'Endereço é obrigatório');
+        }
+        $status = (string)($payload['status'] ?? '');
+        if (!in_array($status, ['ATIVO', 'INATIVO'], true)) {
+            fail_validation('status', 'Status inválido');
+        }
+        $foto = optional_string($payload['foto'] ?? null);
+        $notas = optional_string($payload['notas'] ?? null);
+        $resetSenha = (bool)($payload['reset_senha'] ?? false);
+        $passwordHash = password_hash('UnderConstruction', PASSWORD_DEFAULT);
+        if ($resetSenha) {
+            // nada extra
+        }
+    }
 
     $pdo = Database::connection();
     try {
-        $stmt = $pdo->prepare('INSERT INTO uc_users (code, foto, tipo_usuario, nome, cpf_cnpj, telefone, endereco, email, notas, status, password_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        $stmt = $pdo->prepare('INSERT INTO uc_users (code, foto, tipo_usuario, nome, cpf_cnpj, telefone, endereco, email, notas, status, password_hash, id_principal) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         $stmt->execute([
             $code,
             $foto,
@@ -1484,6 +1682,7 @@ if ($relativePath === '/cadastros' && $method === 'POST') {
             $notas,
             $status,
             $passwordHash,
+            $principalId > 0 ? $principalId : null,
         ]);
     } catch (PDOException $e) {
         if ($e->getCode() === '23000') {
@@ -1493,13 +1692,21 @@ if ($relativePath === '/cadastros' && $method === 'POST') {
         throw $e;
     }
 
-    if ($resetSenha) {
-        // Nada extra a fazer para novos cadastros; para edições futuras, este flag pede reset.
+    $userId = (int)$pdo->lastInsertId();
+    // Se for novo principal (não havia email), define id_principal = próprio user_id
+    if (!$principal) {
+        try {
+            $stmt = $pdo->prepare('UPDATE uc_users SET id_principal = ? WHERE user_id = ?');
+            $stmt->execute([$userId, $userId]);
+        } catch (Throwable $e) {
+            // ignora
+        }
+        $principalId = $userId;
     }
 
-    $userId = (int)$pdo->lastInsertId();
     json_response([
         'userId' => $userId,
+        'idPrincipal' => (int)$principalId,
         'nome' => $nome,
         'email' => $email,
         'tipoUsuario' => $tipoUsuario,
@@ -1531,7 +1738,18 @@ if (preg_match('#^/cadastros/([^/]+)$#', $relativePath, $m) && $method === 'PUT'
     $payload = parse_json_body();
 
     $tipoUsuario = (string)($payload['tipo_usuario'] ?? '');
-    $allowedTipos = ['Pedreiro', 'Ajudante', 'FornecedorMateriais', 'Engenheiro', 'PrestadorServico', 'Gerente', 'Owner'];
+    $allowedTipos = [
+        'Owner',
+        'Proprietario',
+        'Gerente',
+        'Engenheiro',
+        'Arquiteto',
+        'Operacional',
+        'Pedreiro',
+        'Ajudante',
+        'Fornecedor',
+        'Fiscalizacao',
+    ];
     if (!in_array($tipoUsuario, $allowedTipos, true)) {
         fail_validation('tipo_usuario', 'Tipo de usuário inválido');
     }
@@ -1577,6 +1795,11 @@ if (preg_match('#^/cadastros/([^/]+)$#', $relativePath, $m) && $method === 'PUT'
 
     $now = now_datetime_ms();
 
+    $principalId = (int)($existing['id_principal'] ?? 0);
+    if ($principalId <= 0) {
+        $principalId = (int)$existing['user_id'];
+    }
+
     $pdo = Database::connection();
     try {
         $sql = 'UPDATE uc_users
@@ -1593,9 +1816,11 @@ if (preg_match('#^/cadastros/([^/]+)$#', $relativePath, $m) && $method === 'PUT'
             $status,
             $now,
         ];
+        $newHash = null;
         if ($resetSenha) {
+            $newHash = password_hash('UnderConstruction', PASSWORD_DEFAULT);
             $sql .= ', password_hash = ?';
-            $params[] = password_hash('UnderConstruction', PASSWORD_DEFAULT);
+            $params[] = $newHash;
         }
         $sql .= ' WHERE user_id = ? AND ' . uc_users_code_predicate('code');
         $params[] = $userId;
@@ -1603,6 +1828,12 @@ if (preg_match('#^/cadastros/([^/]+)$#', $relativePath, $m) && $method === 'PUT'
 
         $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
+
+        // Se resetou a senha e este registro não é o principal, aplica também no principal
+        if ($resetSenha && (int)$userId !== $principalId && $newHash !== null) {
+            $stmtP = $pdo->prepare('UPDATE uc_users SET password_hash = ?, updated_at = updated_at WHERE user_id = ?');
+            $stmtP->execute([$newHash, $principalId]);
+        }
     } catch (PDOException $e) {
         if ($e->getCode() === '23000') {
             json_response(['detail' => 'CPF/CNPJ ou email já cadastrado.'], 409);
@@ -1648,17 +1879,28 @@ if (preg_match('#^/cadastros/(\\d+)$#', $relativePath, $m) && $method === 'DELET
     verify_current_user_password($password);
 
     $row = fetch_one(
-        'SELECT user_id FROM uc_users WHERE user_id = ? AND ' . uc_users_code_predicate('code') . ' LIMIT 1',
-        [$targetId, $code]
+        'SELECT user_id, id_principal FROM uc_users WHERE user_id = ? LIMIT 1',
+        [$targetId]
     );
     if (!$row) {
         json_response(['detail' => 'Usuário não encontrado.'], 404);
         exit;
     }
 
+    $principalId = (int)($row['id_principal'] ?? 0);
+    if ($principalId <= 0) {
+        $principalId = (int)$row['user_id'];
+    }
+
     $pdo = Database::connection();
-    $stmt = $pdo->prepare('DELETE FROM uc_users WHERE user_id = ? AND ' . uc_users_code_predicate('code'));
-    $stmt->execute([$targetId, $code]);
+    // Se for o principal, apaga todos vinculados.
+    if ($principalId === (int)$row['user_id']) {
+        $stmt = $pdo->prepare('DELETE FROM uc_users WHERE id_principal = ? OR user_id = ?');
+        $stmt->execute([$principalId, $principalId]);
+    } else {
+        $stmt = $pdo->prepare('DELETE FROM uc_users WHERE user_id = ?');
+        $stmt->execute([$targetId]);
+    }
     http_response_code(204);
     exit;
 }

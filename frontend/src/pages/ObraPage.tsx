@@ -124,8 +124,8 @@ export default function ObraPage() {
           { method: 'GET' }
         );
         if (!alive) return;
-        // Na Obra, só faz sentido listar Owner/Engenheiro do código ativo.
-        setUsers((u || []).filter((x) => x.tipoUsuario === 'Owner' || x.tipoUsuario === 'Engenheiro'));
+        // Remove Owner das opções; mantém demais perfis elegíveis.
+        setUsers((u || []).filter((x) => x.tipoUsuario !== 'Owner'));
       } catch (e) {
         if (!alive) return;
         setOptionsError(e instanceof Error ? e.message : 'Falha ao carregar usuários');
@@ -136,7 +136,7 @@ export default function ObraPage() {
     };
   }, [open, user?.activeCode]);
 
-  const owners = useMemo(() => users.filter((u) => u.tipoUsuario === 'Owner'), [users]);
+  const responsaveis = useMemo(() => users, [users]);
   const engenheiros = useMemo(() => users.filter((u) => u.tipoUsuario === 'Engenheiro'), [users]);
 
   return (
@@ -302,8 +302,8 @@ export default function ObraPage() {
           <label>
             <div style={{ fontSize: 12, opacity: 0.8 }}>Responsável</div>
             <select className="input" {...form.register('responsavel_id')} defaultValue="">
-              <option value="">Selecione (Owner)...</option>
-              {owners.map((u) => (
+              <option value="">Selecione...</option>
+              {responsaveis.map((u) => (
                 <option key={u.userId} value={u.userId}>
                   {u.nome}
                 </option>

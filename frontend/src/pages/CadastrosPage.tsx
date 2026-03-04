@@ -30,6 +30,7 @@ function maskPhone(value: string) {
 }
 
 const schema = z.object({
+  id_principal: z.string().optional(),
   foto: z.string().optional(),
   tipo_usuario: z.enum([
     'Owner',
@@ -116,11 +117,13 @@ export default function CadastrosPage() {
   const [q, setQ] = useState('');
   const [tipoFilter, setTipoFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [linkedPrincipal, setLinkedPrincipal] = useState<any | null>(null);
 
   const defaults = useMemo<FormValues>(
     () => ({
+      id_principal: '',
       foto: '',
-      tipo_usuario: 'Pedreiro',
+      tipo_usuario: '',
       nome: '',
       cpf_cnpj: '',
       telefone: '',
@@ -137,6 +140,11 @@ export default function CadastrosPage() {
     resolver: zodResolver(schema),
     defaultValues: defaults
   });
+  const tipoUsuarioValue = form.watch('tipo_usuario');
+  const isLinkedPrincipal = Boolean(linkedPrincipal);
+  const emailValue = form.watch('email') || '';
+  const emailReady = emailValue.trim().length > 0;
+  const lockFields = !emailReady || isLinkedPrincipal;
 
   async function load() {
     setLoading(true);
@@ -160,6 +168,34 @@ export default function CadastrosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.activeCode]);
 
+  async function handleEmailLookup(email: string) {
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed) {
+      setLinkedPrincipal(null);
+      return;
+    }
+    try {
+      const res = await apiFetch<any | null>(`/cadastros/lookup?email=${encodeURIComponent(trimmed)}`, { method: 'GET' });
+      if (!res) {
+        setLinkedPrincipal(null);
+        form.setValue('id_principal', '');
+        return;
+      }
+      setLinkedPrincipal(res);
+      form.setValue('id_principal', res.idPrincipal || '');
+      form.setValue('nome', res.nome || '');
+      form.setValue('cpf_cnpj', res.cpfCnpj || '');
+      form.setValue('telefone', res.telefone || '');
+      form.setValue('endereco', res.endereco || '');
+      form.setValue('status', res.status || 'ATIVO');
+      form.setValue('foto', res.foto || '');
+      // tipo_usuario permanece para escolha; notas limpa para novo contexto.
+    } catch (e) {
+      console.error(e);
+      setLinkedPrincipal(null);
+    }
+  }
+
   return (
     <div className="card" style={{ padding: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
@@ -175,6 +211,7 @@ export default function CadastrosPage() {
             setEditingRow(null);
             form.reset(defaults);
             setSelectedPhotoFile(null);
+            setLinkedPrincipal(null);
             setOpen(true);
           }}
         >
@@ -197,7 +234,6 @@ export default function CadastrosPage() {
           <option value="Fornecedor">Fornecedor</option>
           <option value="Gerente">Gerente</option>
           <option value="Operacional">Operacional</option>
-          <option value="Owner">Owner</option>
           <option value="Pedreiro">Pedreiro</option>
           <option value="Proprietario">Proprietário</option>
         </select>
@@ -262,7 +298,9 @@ export default function CadastrosPage() {
                         setMode('edit');
                         setEditingRow(r);
                         setSelectedPhotoFile(null);
+                        setLinkedPrincipal(null);
                         form.reset({
+                          id_principal: r.idPrincipal || '',
                           foto: r.foto || '',
                           tipo_usuario: r.tipoUsuario,
                           nome: r.nome,
@@ -323,6 +361,7 @@ export default function CadastrosPage() {
                   }
                   const payload = {
                     ...values,
+                    id_principal: values.id_principal || undefined,
                     foto: fotoPath || null,
                     reset_senha: Boolean(values.reset_senha)
                   };
@@ -350,6 +389,12 @@ export default function CadastrosPage() {
           onSubmit={(e) => e.preventDefault()}
           style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}
         >
+          {isLinkedPrincipal ? (
+            <div style={{ gridColumn: '1 / -1', padding: 10, borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', fontSize: 12 }}>
+              Este email já possui cadastro principal. Dados bloqueados; preencha apenas <b>Tipo de usuário</b> e <b>Notas</b>. Senha e demais campos seguem o cadastro principal.
+            </div>
+          ) : null}
+
           <div style={{ gridColumn: '1 / -1' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
               <div>
@@ -359,12 +404,13 @@ export default function CadastrosPage() {
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <label className="btn" style={{ cursor: 'pointer' }}>
+                <label className="btn" style={{ cursor: lockFields ? 'not-allowed' : 'pointer', opacity: lockFields ? 0.6 : 1 }}>
                   Selecionar
                   <input
                     type="file"
                     accept="image/*"
                     style={{ display: 'none' }}
+                    disabled={lockFields}
                     onChange={(e) => {
                       const file = e.target.files?.[0] ?? null;
                       setSelectedPhotoFile(file);
@@ -377,7 +423,7 @@ export default function CadastrosPage() {
                   onClick={() => {
                     setSelectedPhotoFile(null);
                   }}
-                  disabled={!selectedPhotoFile}
+                  disabled={!selectedPhotoFile || lockFields}
                 >
                   Remover
                 </button>
@@ -385,10 +431,30 @@ export default function CadastrosPage() {
             </div>
           </div>
 
+          <label style={{ gridColumn: '1 / -1' }}>
+            <input type="hidden" {...form.register('id_principal')} />
+            <div style={{ fontSize: 12, opacity: 0.8 }}>Email</div>
+            <input
+              className="input"
+              type="email"
+              {...form.register('email')}
+              onBlur={(e) => handleEmailLookup(e.target.value)}
+              disabled={isLinkedPrincipal}
+            />
+            {form.formState.errors.email && (
+              <div style={{ color: 'var(--danger)', fontSize: 12 }}>{form.formState.errors.email.message}</div>
+            )}
+          </label>
+
           <label>
             <div style={{ fontSize: 12, opacity: 0.8 }}>Tipo de usuário</div>
-            <select className="input" {...form.register('tipo_usuario')}>
-              <option value="Owner">Owner</option>
+            <select
+              className="input"
+              {...form.register('tipo_usuario')}
+              disabled={tipoUsuarioValue === 'Owner' ? true : !emailReady}
+            >
+              <option value="">Selecione uma função...</option>
+              {tipoUsuarioValue === 'Owner' ? <option value="Owner">Owner (reservado)</option> : null}
               <option value="Proprietario">Proprietário</option>
               <option value="Gerente">Gerente</option>
               <option value="Engenheiro">Engenheiro</option>
@@ -403,7 +469,7 @@ export default function CadastrosPage() {
 
           <label>
             <div style={{ fontSize: 12, opacity: 0.8 }}>Nome</div>
-            <input className="input" {...form.register('nome')} />
+            <input className="input" {...form.register('nome')} disabled={lockFields} />
             {form.formState.errors.nome && (
               <div style={{ color: 'var(--danger)', fontSize: 12 }}>{form.formState.errors.nome.message}</div>
             )}
@@ -415,6 +481,7 @@ export default function CadastrosPage() {
               className="input"
               {...form.register('cpf_cnpj')}
               value={maskCpfCnpj(form.watch('cpf_cnpj'))}
+              disabled={lockFields}
               onChange={(e) => {
                 const masked = maskCpfCnpj(e.target.value);
                 form.setValue('cpf_cnpj', masked, { shouldValidate: true });
@@ -431,6 +498,7 @@ export default function CadastrosPage() {
               className="input"
               {...form.register('telefone')}
               value={maskPhone(form.watch('telefone'))}
+              disabled={lockFields}
               onChange={(e) => {
                 const masked = maskPhone(e.target.value);
                 form.setValue('telefone', masked, { shouldValidate: true });
@@ -443,23 +511,15 @@ export default function CadastrosPage() {
 
           <label>
             <div style={{ fontSize: 12, opacity: 0.8 }}>Endereço</div>
-            <input className="input" {...form.register('endereco')} />
+            <input className="input" {...form.register('endereco')} disabled={lockFields} />
             {form.formState.errors.endereco && (
               <div style={{ color: 'var(--danger)', fontSize: 12 }}>{form.formState.errors.endereco.message}</div>
             )}
           </label>
 
           <label>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>Email</div>
-            <input className="input" type="email" {...form.register('email')} />
-            {form.formState.errors.email && (
-              <div style={{ color: 'var(--danger)', fontSize: 12 }}>{form.formState.errors.email.message}</div>
-            )}
-          </label>
-
-          <label>
             <div style={{ fontSize: 12, opacity: 0.8 }}>Status</div>
-            <select className="input" {...form.register('status')}>
+            <select className="input" {...form.register('status')} disabled={lockFields}>
               <option value="ATIVO">ATIVO</option>
               <option value="INATIVO">INATIVO</option>
             </select>
@@ -468,7 +528,7 @@ export default function CadastrosPage() {
           <label style={{ gridColumn: '1 / -1' }}>
             <div style={{ fontSize: 12, opacity: 0.8 }}>Resetar Senha?</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
-              <input type="checkbox" {...form.register('reset_senha')} />
+              <input type="checkbox" {...form.register('reset_senha')} disabled={lockFields} />
               <div style={{ fontSize: 12, opacity: 0.75 }}>
                 Se SIM, ao salvar a edição o backend volta a senha para o padrão <b>UnderConstruction</b>.
               </div>
@@ -477,7 +537,7 @@ export default function CadastrosPage() {
 
           <label style={{ gridColumn: '1 / -1' }}>
             <div style={{ fontSize: 12, opacity: 0.8 }}>Notas (text)</div>
-            <textarea className="input" {...form.register('notas')} />
+            <textarea className="input" {...form.register('notas')} disabled={!emailReady} />
           </label>
 
           <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 12, opacity: 0.75, fontSize: 12 }}>

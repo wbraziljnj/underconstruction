@@ -187,7 +187,7 @@ export default function FaturaPage() {
           apiFetch<FaseOption[]>('/fases/options', { method: 'GET' })
         ]);
         if (!alive) return;
-        setUsers(u);
+        setUsers((u || []).filter((x) => x.tipoUsuario !== 'Owner'));
         setFases(f);
       } catch (e) {
         if (!alive) return;

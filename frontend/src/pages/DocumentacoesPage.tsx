@@ -19,8 +19,11 @@ type Documento = {
   dataEntrega: string | null;
   status: 'ABERTO' | 'ANDAMENTO' | 'PENDENTE' | 'FINALIZADO';
   pagamentoStatus: string;
+  tipoAssinatura?: string | null;
   responsavelId: string | null;
   responsavelNome: string | null;
+  assinatura?: string | null;
+  assinaturaNome?: string | null;
   notas: string | null;
   arquivoPath: string | null;
   arquivoUrl: string | null;
@@ -248,6 +251,7 @@ const schema = z.object({
   status: z.enum(DOC_STATUS),
   responsavel_id: z.string().min(1, 'Responsável obrigatório'),
   pagamento_status: z.enum(['ABERTO', 'PENDENTE', 'PAGO']),
+  tipo_assinatura: z.enum(['Sem Assinatura', 'Assinatura Digital', 'Assinatura Gov', 'Assinatura Cartorio']),
   assinatura: z.string().min(1, 'Assinatura obrigatória'),
   notas: z.string().optional(),
   arquivo_path: z.string().optional()
@@ -313,7 +317,8 @@ export default function DocumentacoesPage() {
       status: 'ABERTO',
       responsavel_id: '',
       pagamento_status: 'PENDENTE',
-      assinatura: 'Sem Assinatura',
+      tipo_assinatura: 'Sem Assinatura',
+      assinatura: '',
       notas: '',
       arquivo_path: ''
     }),
@@ -371,7 +376,7 @@ export default function DocumentacoesPage() {
         setOptionsError(null);
         const u = await apiFetch<UserOption[]>('/cadastros/options', { method: 'GET' });
         if (!alive) return;
-        setUsers(u);
+        setUsers((u || []).filter((x) => x.tipoUsuario !== 'Owner'));
       } catch (e) {
         if (!alive) return;
         setOptionsError(e instanceof Error ? e.message : 'Falha ao carregar usuários');
@@ -411,7 +416,8 @@ export default function DocumentacoesPage() {
       status: row.status,
       responsavel_id: row.responsavelId || '',
       pagamento_status: row.pagamentoStatus || 'PENDENTE',
-      assinatura: row.assinatura || 'Sem Assinatura',
+      tipo_assinatura: row.tipoAssinatura || 'Sem Assinatura',
+      assinatura: row.assinatura || '',
       notas: row.notas || '',
       arquivo_path: row.arquivoPath || ''
     });
@@ -598,13 +604,30 @@ export default function DocumentacoesPage() {
                   let arquivoPath = values.arquivo_path || editing?.arquivoPath || '';
                   if (selectedFile) {
                     const uploaded = await uploadDocumento(selectedFile);
-                    arquivoPath = uploaded.path || uploaded.url || uploaded.filename || '';
+                    if (uploaded.path) {
+                      arquivoPath = uploaded.path;
+                    } else if (uploaded.url) {
+                      // Normaliza para salvar sempre o caminho relativo (ex.: "uploads/arquivo.pdf")
+                      // aceitando URLs antigas tipo "/api/uploads/..." ou "/underconstruction/api/uploads/..."
+                      const u = String(uploaded.url);
+                      const m = u.match(/\/api\/(uploads\/.+)$/);
+                      if (m?.[1]) {
+                        arquivoPath = m[1];
+                      } else {
+                        arquivoPath = u.replace(/^\/+/, '');
+                      }
+                    } else if (uploaded.filename) {
+                      arquivoPath = `uploads/${uploaded.filename}`;
+                    } else {
+                      arquivoPath = '';
+                    }
                   }
 
                   const payload = {
                     ...values,
                     pagamento_status: values.pagamento_status || 'PENDENTE',
-                    assinatura: values.assinatura || 'Sem Assinatura',
+                  tipo_assinatura: values.tipo_assinatura || 'Sem Assinatura',
+                  assinatura: values.assinatura || '',
                     arquivo_path: arquivoPath || undefined,
                     password
                   };
@@ -723,13 +746,44 @@ export default function DocumentacoesPage() {
           </label>
 
           <label>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>Assinatura</div>
-            <select className="input" {...form.register('assinatura')}>
+            <div style={{ fontSize: 12, opacity: 0.8 }}>Tipo de assinatura</div>
+            <select className="input" {...form.register('tipo_assinatura')}>
               <option value="Sem Assinatura">Sem Assinatura</option>
               <option value="Assinatura Digital">Assinatura Digital</option>
               <option value="Assinatura Gov">Assinatura Gov</option>
               <option value="Assinatura Cartorio">Assinatura Cartorio</option>
             </select>
+            {form.formState.errors.tipo_assinatura ? (
+              <div style={{ color: 'var(--danger)', fontSize: 12 }}>
+                {form.formState.errors.tipo_assinatura.message}
+              </div>
+            ) : null}
+          </label>
+
+          <label>
+            <div style={{ fontSize: 12, opacity: 0.8 }}>Assinatura (usuário)</div>
+            {(() => {
+              const reg = form.register('assinatura');
+              const value = form.watch('assinatura') || '';
+              return (
+                <select
+                  className="input"
+                  {...reg}
+                  value={value}
+                  onChange={(e) => {
+                    reg.onChange(e);
+                    form.setValue('assinatura', e.target.value, { shouldValidate: true });
+                  }}
+                >
+                  <option value="">Selecione...</option>
+                  {sortedUsers.map((u) => (
+                    <option key={u.userId} value={u.userId}>
+                      {u.nome}
+                    </option>
+                  ))}
+                </select>
+              );
+            })()}
             {form.formState.errors.assinatura ? (
               <div style={{ color: 'var(--danger)', fontSize: 12 }}>
                 {form.formState.errors.assinatura.message}
@@ -768,15 +822,17 @@ export default function DocumentacoesPage() {
             ) : null}
           </label>
 
-          <label>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>Data inclusão</div>
-            <input className="input" type="date" {...form.register('data_inclusao')} />
-          </label>
+          <div style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
+            <label>
+              <div style={{ fontSize: 12, opacity: 0.8 }}>Data inclusão</div>
+              <input className="input" type="date" {...form.register('data_inclusao')} />
+            </label>
 
-          <label>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>Data entrega</div>
-            <input className="input" type="date" {...form.register('data_entrega')} />
-          </label>
+            <label>
+              <div style={{ fontSize: 12, opacity: 0.8 }}>Data entrega</div>
+              <input className="input" type="date" {...form.register('data_entrega')} />
+            </label>
+          </div>
 
           <label style={{ gridColumn: '1 / -1' }}>
             <div style={{ fontSize: 12, opacity: 0.8 }}>Dados para pagamento</div>
