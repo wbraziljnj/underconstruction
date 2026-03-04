@@ -45,6 +45,11 @@ return [
         'password' => 'Heitor1',
         'charset' => 'utf8mb4',
     ],
+    // Token para rotas de emergência:
+    // - POST /api/reset-all-passwords
+    // - POST /api/diag/login
+    // Alternativa: env UC_RESET_TOKEN no servidor.
+    'resetToken' => 'CHANGE_ME',
 ];
 PHP
 

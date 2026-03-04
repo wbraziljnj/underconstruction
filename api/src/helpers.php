@@ -125,6 +125,18 @@ function get_user_obras_codes(): array
  */
 function parse_user_codes_from_db(mixed $dbValue): array
 {
+    if (is_array($dbValue)) {
+        $out = [];
+        foreach ($dbValue as $c) {
+            if (is_string($c)) {
+                $c = trim($c);
+                if ($c !== '') {
+                    $out[] = $c;
+                }
+            }
+        }
+        return array_values(array_unique($out));
+    }
     if (!is_string($dbValue)) {
         return [];
     }

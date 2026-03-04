@@ -51,10 +51,23 @@ if (isset($_GET['ucDebug']) && $_GET['ucDebug'] === 'ping') {
 // Conectar cedo para falhar rápido (mesmo padrão do Sheila).
 Database::connection();
 
+function get_bearer_token(): ?string
+{
+    $h = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+    if (!is_string($h) || $h === '') {
+        return null;
+    }
+    if (preg_match('/^Bearer\\s+(.*)$/i', trim($h), $m) === 1) {
+        $t = trim((string)($m[1] ?? ''));
+        return $t !== '' ? $t : null;
+    }
+    return null;
+}
+
 function verify_current_user_password(string $password): void
 {
     $userId = require_authenticated_user_id();
-    $user = fetch_one('SELECT password_hash FROM uc_users WHERE user_id = ? LIMIT 1', [(int)$userId]);
+    $user = fetch_one('SELECT password_hash FROM uc_users WHERE user_id = ? LIMIT 1', [$userId]);
     if (!$user) {
         json_response(['detail' => 'Não autenticado.'], 401);
         exit;
@@ -66,17 +79,116 @@ function verify_current_user_password(string $password): void
     }
     $info = password_get_info($stored);
     $isHash = is_array($info) && (int)($info['algo'] ?? 0) !== 0;
-    $ok = $isHash ? password_verify($password, $stored) : hash_equals($stored, $password);
+    if ($isHash) {
+        $ok = password_verify($password, $stored);
+    } else {
+        // Compat: legado com MD5/SHA1/SHA256 (hex) ou texto puro.
+        if (preg_match('/^[a-f0-9]{32}$/i', $stored) === 1) {
+            $ok = hash_equals(strtolower($stored), md5($password));
+        } elseif (preg_match('/^[a-f0-9]{40}$/i', $stored) === 1) {
+            $ok = hash_equals(strtolower($stored), sha1($password));
+        } elseif (preg_match('/^[a-f0-9]{64}$/i', $stored) === 1) {
+            $ok = hash_equals(strtolower($stored), hash('sha256', $password));
+        } else {
+            $ok = hash_equals($stored, $password);
+        }
+    }
     if (!$ok) {
         json_response(['detail' => 'Senha inválida.'], 403);
         exit;
     }
 }
 
+// Endpoint de emergência: resetar senha de todos os usuários.
+// Protegido por token (env UC_RESET_TOKEN ou config.php ['resetToken']).
+if ($relativePath === '/reset-all-passwords' && $method === 'POST') {
+    $config = require __DIR__ . '/config.php';
+    $expected = getenv('UC_RESET_TOKEN') ?: (string)($config['resetToken'] ?? '');
+    $expected = trim($expected);
+    if ($expected === '') {
+        json_response(['detail' => 'Rota desabilitada.'], 404);
+        exit;
+    }
+
+    $payload = parse_json_body();
+    $token = get_bearer_token() ?? (is_string($payload['token'] ?? null) ? trim((string)$payload['token']) : '');
+    if ($token === '' || !hash_equals($expected, $token)) {
+        json_response(['detail' => 'Não autorizado.'], 401);
+        exit;
+    }
+
+    $newHash = password_hash('UnderConstruction', PASSWORD_DEFAULT);
+    $pdo = Database::connection();
+    try {
+        $stmt = $pdo->prepare('UPDATE uc_users SET password_hash = ?, updated_at = updated_at');
+        $stmt->execute([$newHash]);
+        $count = $stmt->rowCount();
+    } catch (Throwable) {
+        $stmt = $pdo->prepare('UPDATE uc_users SET password_hash = ?');
+        $stmt->execute([$newHash]);
+        $count = $stmt->rowCount();
+    }
+    json_response(['ok' => true, 'updated' => (int)$count, 'password' => 'UnderConstruction']);
+    exit;
+}
+
+// Diagnóstico de login (token): mostra se usuário existe e formato de password_hash, sem expor senha.
+if ($relativePath === '/diag/login' && $method === 'POST') {
+    $config = require __DIR__ . '/config.php';
+    $expected = getenv('UC_RESET_TOKEN') ?: (string)($config['resetToken'] ?? '');
+    $expected = trim($expected);
+    if ($expected === '') {
+        json_response(['detail' => 'Rota desabilitada.'], 404);
+        exit;
+    }
+
+    $payload = parse_json_body();
+    $token = get_bearer_token() ?? (is_string($payload['token'] ?? null) ? trim((string)$payload['token']) : '');
+    if ($token === '' || !hash_equals($expected, $token)) {
+        json_response(['detail' => 'Não autorizado.'], 401);
+        exit;
+    }
+
+    $email = trim((string)($payload['email'] ?? ($payload['identifier'] ?? '')));
+    if ($email === '' || filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+        json_response(['detail' => 'email inválido.'], 400);
+        exit;
+    }
+
+    $pdo = Database::connection();
+    $dbName = (string)$pdo->query('SELECT DATABASE() AS db')->fetch()['db'];
+    $user = fetch_one('SELECT user_id, email, status, code, password_hash FROM uc_users WHERE LOWER(email) = ? LIMIT 1', [strtolower($email)]);
+    if (!$user) {
+        json_response(['ok' => true, 'db' => $dbName, 'userFound' => false]);
+        exit;
+    }
+    $stored = (string)($user['password_hash'] ?? '');
+    $info = $stored !== '' ? password_get_info($stored) : ['algo' => 0, 'algoName' => ''];
+    $isMd5 = $stored !== '' && preg_match('/^[a-f0-9]{32}$/i', $stored) === 1;
+    $isSha1 = $stored !== '' && preg_match('/^[a-f0-9]{40}$/i', $stored) === 1;
+    $isSha256 = $stored !== '' && preg_match('/^[a-f0-9]{64}$/i', $stored) === 1;
+
+    json_response([
+        'ok' => true,
+        'db' => $dbName,
+        'userFound' => true,
+        'status' => $user['status'] ?? null,
+        'passwordStoredLen' => strlen($stored),
+        'passwordLooksLikeHash' => (int)($info['algo'] ?? 0) !== 0,
+        'passwordAlgo' => (string)($info['algoName'] ?? ''),
+        'passwordLooksLikeMd5' => $isMd5,
+        'passwordLooksLikeSha1' => $isSha1,
+        'passwordLooksLikeSha256' => $isSha256,
+        'codeType' => gettype($user['code'] ?? null),
+        'codePreview' => is_string($user['code'] ?? null) ? substr((string)$user['code'], 0, 80) : null,
+    ]);
+    exit;
+}
+
 function require_privileged_role(): void
 {
     $userId = require_authenticated_user_id();
-    $row = fetch_one('SELECT tipo_usuario FROM uc_users WHERE user_id = ? LIMIT 1', [(int)$userId]);
+    $row = fetch_one('SELECT tipo_usuario FROM uc_users WHERE user_id = ? LIMIT 1', [$userId]);
     if (!$row) {
         json_response(['detail' => 'Não autenticado.'], 401);
         exit;
@@ -201,9 +313,17 @@ if ($relativePath === '/login' && $method === 'POST') {
     if ($isHash) {
         $ok = password_verify($password, $stored);
     } else {
-        // Compat: banco com senha em texto puro (coluna password_hash).
+        // Compat: legado com MD5/SHA1/SHA256 (hex) ou texto puro (coluna password_hash).
         // Se bater, faz upgrade automático para hash.
-        $ok = hash_equals($stored, $password);
+        if (preg_match('/^[a-f0-9]{32}$/i', $stored) === 1) {
+            $ok = hash_equals(strtolower($stored), md5($password));
+        } elseif (preg_match('/^[a-f0-9]{40}$/i', $stored) === 1) {
+            $ok = hash_equals(strtolower($stored), sha1($password));
+        } elseif (preg_match('/^[a-f0-9]{64}$/i', $stored) === 1) {
+            $ok = hash_equals(strtolower($stored), hash('sha256', $password));
+        } else {
+            $ok = hash_equals($stored, $password);
+        }
         if ($ok) {
             $newHash = password_hash($password, PASSWORD_DEFAULT);
             try {

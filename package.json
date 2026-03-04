@@ -2,9 +2,14 @@
   "name": "under-construction",
   "private": true,
   "version": "0.1.0",
+  "type": "module",
   "scripts": {
     "dev": "npm -C frontend run dev",
     "build": "npm -C frontend run build",
-    "deploy": "bash ./prepare-deploy.sh"
+    "deploy": "bash ./prepare-deploy.sh",
+    "watch:deploy": "node ./scripts/watch-deploy.mjs"
+  },
+  "devDependencies": {
+    "chokidar": "^4.0.3"
   }
 }
