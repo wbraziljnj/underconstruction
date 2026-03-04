@@ -87,11 +87,13 @@ function require_active_obra_codigo(): string
         json_response(['error' => 'Nenhuma obra selecionada.'], 409);
         exit;
     }
-    // Se houver lista de obras no contexto do usuário, valida acesso.
-    $codes = get_user_obras_codes();
-    if ($codes !== [] && !in_array($codigo, $codes, true)) {
-        json_response(['detail' => 'Você não tem acesso a esta obra.'], 403);
-        exit;
+    if (!is_owner_authenticated()) {
+        // Se houver lista de obras no contexto do usuário, valida acesso (exceto Owner).
+        $codes = get_user_obras_codes();
+        if ($codes !== [] && !in_array($codigo, $codes, true)) {
+            json_response(['detail' => 'Você não tem acesso a esta obra.'], 403);
+            exit;
+        }
     }
     return $codigo;
 }
@@ -116,6 +118,25 @@ function get_user_obras_codes(): array
         return array_values(array_unique($out));
     }
     return [];
+}
+
+function current_user_tipo_usuario(): ?string
+{
+    start_session_if_needed();
+    $userId = $_SESSION['uc_user_id'] ?? null;
+    if (!is_string($userId) || trim($userId) === '') {
+        return null;
+    }
+    $row = fetch_one('SELECT tipo_usuario FROM uc_users WHERE user_id = ? LIMIT 1', [$userId]);
+    if (!$row) {
+        return null;
+    }
+    return trim((string)($row['tipo_usuario'] ?? ''));
+}
+
+function is_owner_authenticated(): bool
+{
+    return current_user_tipo_usuario() === 'Owner';
 }
 
 /**
@@ -163,11 +184,48 @@ function parse_user_codes_from_db(mixed $dbValue): array
 
 function require_user_has_codigo(string $codigo): void
 {
+    if (is_owner_authenticated()) {
+        return;
+    }
     $codes = get_user_obras_codes();
     if (!in_array($codigo, $codes, true)) {
         json_response(['detail' => 'Você não tem acesso a esta obra.'], 403);
         exit;
     }
+}
+
+/**
+ * Detecta se `uc_users.code` é JSON array (multi-obra) ou string (compat).
+ *
+ * Retorna:
+ * - 'array' quando o valor parece ser um JSON ARRAY (ex.: ["a","b"])
+ * - 'scalar' quando o valor é JSON STRING (ex.: "a") ou não é JSON (VARCHAR legado)
+ */
+// Nesta instalação, `code` é armazenado como string simples (varchar/longtext).
+// Forçamos modo scalar para evitar discrepâncias com registros JSON/array.
+function uc_users_code_mode(): string
+{
+    return 'scalar';
+}
+
+function uc_users_code_predicate(string $columnRef = 'code'): string
+{
+    // Igualdade direta (string).
+    return "$columnRef = ?";
+}
+
+/**
+ * Predicado compatível para colunas `code` que podem estar como:
+ * - VARCHAR (legado)
+ * - JSON array (multi-código)
+ * - JSON string (alguns casos)
+ *
+ * `$table` deve ser um nome conhecido/constante do sistema (não vindo do usuário).
+ */
+function uc_code_predicate_for_table(string $table, string $columnRef = 'code'): string
+{
+    // Igualdade direta (string) para todas as tabelas.
+    return "$columnRef = ?";
 }
 
 function now_datetime_ms(): string

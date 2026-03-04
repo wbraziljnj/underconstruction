@@ -1,0 +1,130 @@
+Como fazer build (Under Construction)
+====================================
+
+Objetivo
+--------
+Este projeto é uma SPA (React + Vite + TS) com API em PHP.
+
+A pasta `deploy/` deve ser encarada como a RAIZ do servidor.
+Ou seja: depois do build/deploy, `deploy/` precisa conter tudo que será enviado para:
+https://wbrazilsoftwares.com.br/underconstruction/
+
+O script de deploy deste repositório:
+- compila o frontend
+- copia o backend PHP para dentro de `deploy/api/`
+- copia o `.htaccess` de rewrite para SPA (para funcionar refresh/rotas)
+
+
+Pré-requisitos
+-------------
+1) Node.js + npm instalados (recomendado Node 18+).
+2) PHP 8.x no servidor (para a API).
+3) Acesso/permite upload de arquivos no servidor (FTP/SSH/painel).
+
+Obs.: Não usamos Docker.
+
+
+Estrutura (o que vai para o servidor)
+------------------------------------
+Após rodar o deploy, a pasta `deploy/` deve conter:
+- `deploy/index.html`                (SPA)
+- `deploy/assets/*`                  (JS/CSS buildados)
+- `deploy/.htaccess`                 (rewrite SPA)
+- `deploy/api/*`                     (API PHP)
+- `deploy/favicon.png` e `deploy/logo.png` (ícones)
+
+No servidor, o conteúdo de `deploy/` deve ser copiado para a pasta pública:
+`/underconstruction/` (raiz do sistema).
+
+
+Comandos (passo a passo)
+------------------------
+
+1) Instalar dependências (uma vez, ou quando mudar package.json)
+
+Na RAIZ do projeto:
+  npm install
+
+No FRONTEND:
+  npm -C frontend install
+
+Se der erro de `npm install` no frontend (ex.: ENOTEMPTY em node_modules),
+normalmente é resquício de pasta/instalação anterior. A solução comum é remover
+`frontend/node_modules` e instalar de novo.
+
+2) Build local do frontend (gera o build e já coloca em `deploy/`)
+
+  npm -C frontend run build
+
+Obs.: o Vite está configurado com base `/underconstruction/`, então os assets
+no `index.html` gerado apontam para essa base quando publicado no servidor.
+
+3) Deploy completo (recomendado)
+
+O comando padrão para “buildar tudo e deixar `deploy/` pronto” é:
+
+  npm run deploy
+
+O script `npm run deploy` executa `bash ./prepare-deploy.sh`, que faz:
+- limpa `deploy/` (garante que não sobra arquivo velho)
+- roda o build do frontend (Vite) com output direto em `deploy/`
+- copia a API PHP (pasta `api/`) para `deploy/api/`
+- copia o `.htaccess` para `deploy/.htaccess`
+- copia assets estáticos necessários
+
+Sempre use `npm run deploy` antes de subir para o servidor.
+
+
+Como subir para o servidor
+-------------------------
+Depois do `npm run deploy`, envie o CONTEÚDO de `deploy/` para a pasta:
+  /underconstruction/
+
+Exemplo (FTP/painel):
+- apagar/atualizar os arquivos antigos da raiz do sistema
+- enviar todos os arquivos de `deploy/` (incluindo `.htaccess` e `api/`)
+
+Importante:
+- `deploy/` é a raiz: não subir a pasta `deploy/` “dentro” de outra pasta.
+- precisa manter o `.htaccess` para SPA funcionar em refresh.
+
+
+Configuração do banco (produção)
+-------------------------------
+A API usa `api/config.php` no repositório e, no deploy, é comum existir
+`deploy/api/config.php` com credenciais no servidor.
+
+Se a API reclamar de variáveis de ambiente, verifique:
+- `UC_DB_HOSTS`
+- `UC_DB_NAME`
+- `UC_DB_USER`
+- `UC_DB_PASS`
+
+Obs.: este repo não deve versionar senha/usuário em texto.
+
+
+Migrations / ajustes de banco (quando necessário)
+-------------------------------------------------
+As migrations SQL ficam em `db/migrations/`.
+Quando o sistema pedir um campo novo ou ajuste de schema, aplique no MySQL.
+
+Exemplos recentes:
+- `004_users_code_json.sql`      (multi-obra em `uc_users.code`)
+- `005_add_dados_pagamento_uc_faturas.sql`
+- `006_add_nfe_uc_faturas.sql`
+- `007_add_notas_uc_faturas.sql`
+- `008_uc_users_optional_fields.sql` (campos opcionais em usuários)
+
+Depois de aplicar migrations, não esqueça de:
+  npm run deploy
+e subir o `deploy/` atualizado.
+
+
+Checklist final (antes de subir)
+--------------------------------
+1) `npm run deploy` rodou sem erro.
+2) Conferir que `deploy/index.html` existe.
+3) Conferir que `deploy/assets/` tem JS/CSS novos.
+4) Conferir que `deploy/api/index.php` existe.
+5) Subir `deploy/` para a raiz `/underconstruction/` no servidor.
+

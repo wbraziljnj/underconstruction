@@ -343,6 +343,11 @@ if ($relativePath === '/login' && $method === 'POST') {
 
     $_SESSION['uc_user_id'] = (string)$user['user_id'];
     $codes = parse_user_codes_from_db($user['code'] ?? '');
+    // Se Owner, substitui por todas as obras existentes
+    if ((string)($user['tipo_usuario'] ?? '') === 'Owner') {
+        $rows = fetch_all('SELECT codigo FROM uc_obra');
+        $codes = array_values(array_unique(array_map(fn($r) => (string)$r['codigo'], $rows)));
+    }
     $_SESSION['uc_codes'] = $codes;
     $active = $_SESSION['uc_active_code'] ?? null;
     if (!is_string($active) || !in_array($active, $codes, true)) {
@@ -373,6 +378,11 @@ if ($relativePath === '/me' && $method === 'GET') {
         exit;
     }
     $codes = parse_user_codes_from_db($user['code'] ?? '');
+    // Se Owner, substitui por todas as obras existentes
+    if ((string)($user['tipo_usuario'] ?? '') === 'Owner') {
+        $rows = fetch_all('SELECT codigo FROM uc_obra');
+        $codes = array_values(array_unique(array_map(fn($r) => (string)$r['codigo'], $rows)));
+    }
     $_SESSION['uc_codes'] = $codes;
     $active = $_SESSION['uc_active_code'] ?? null;
     if (!is_string($active) || !in_array($active, $codes, true)) {
@@ -400,11 +410,23 @@ if ($relativePath === '/logout' && $method === 'POST') {
 
 if ($relativePath === '/obras' && $method === 'GET') {
     require_authenticated_user_id();
-    $codes = get_user_obras_codes();
     $activeCode = get_active_obra_codigo();
+    $codes = get_user_obras_codes();
+    $isOwner = is_owner_authenticated();
 
     $obras = [];
-    if ($codes !== []) {
+    if ($isOwner) {
+        $rows = fetch_all('SELECT obra_id, foto, nome, codigo FROM uc_obra ORDER BY nome ASC');
+        $obras = array_map(fn ($r) => [
+            'obraId' => (int)$r['obra_id'],
+            'nome' => (string)$r['nome'],
+            'codigo' => (string)$r['codigo'],
+            'foto' => $r['foto'] !== null ? (string)$r['foto'] : null,
+        ], $rows);
+        $codes = array_values(array_unique(array_map(fn ($r) => (string)$r['codigo'], $rows)));
+        // Owner pode acessar todas; mantém codes na sessão para coerência.
+        $_SESSION['uc_codes'] = $codes;
+    } elseif ($codes !== []) {
         $placeholders = implode(',', array_fill(0, count($codes), '?'));
         $rows = fetch_all(
             "SELECT obra_id, foto, nome, codigo FROM uc_obra WHERE codigo IN ($placeholders) ORDER BY nome ASC",
@@ -418,10 +440,19 @@ if ($relativePath === '/obras' && $method === 'GET') {
         ], $rows);
     }
 
+    // Ajusta activeCode para um válido
+    if (!is_string($activeCode) || !in_array($activeCode, $codes, true)) {
+        $activeCode = $codes[0] ?? null;
+        if ($activeCode !== null) {
+            $_SESSION['uc_active_code'] = $activeCode;
+        }
+    }
+
     json_response([
         'codes' => $codes,
         'activeCode' => $activeCode,
         'obras' => $obras,
+        'owner' => $isOwner,
     ]);
     exit;
 }
@@ -443,7 +474,7 @@ if ($relativePath === '/cadastros/options' && $method === 'GET') {
     require_authenticated_user_id();
     $code = require_active_obra_codigo();
     $rows = fetch_all(
-        'SELECT user_id, nome, tipo_usuario, status FROM uc_users WHERE JSON_CONTAINS(code, JSON_QUOTE(?)) ORDER BY nome ASC',
+        'SELECT user_id, nome, tipo_usuario, status FROM uc_users WHERE ' . uc_users_code_predicate('code') . ' ORDER BY nome ASC',
         [$code]
     );
     $options = array_map(fn ($r) => [
@@ -460,7 +491,7 @@ if ($relativePath === '/fases/options' && $method === 'GET') {
     require_authenticated_user_id();
     $code = require_active_obra_codigo();
     $rows = fetch_all(
-        'SELECT fase_id, fase, data_inicio, previsao_finalizacao, data_finalizacao, status FROM uc_fases WHERE code = ? ORDER BY data_inicio ASC',
+        'SELECT fase_id, fase, data_inicio, previsao_finalizacao, data_finalizacao, status FROM uc_fases WHERE ' . uc_code_predicate_for_table('uc_fases', 'code') . ' ORDER BY data_inicio ASC',
         [$code]
     );
     $options = array_map(fn ($r) => [
@@ -484,7 +515,7 @@ if ($relativePath === '/cadastros' && $method === 'GET') {
     $status = trim((string)($_GET['status'] ?? ''));
 
     $sql = 'SELECT user_id, foto, tipo_usuario, nome, cpf_cnpj, telefone, endereco, email, notas, status, created_at, updated_at
-            FROM uc_users WHERE JSON_CONTAINS(code, JSON_QUOTE(?))';
+            FROM uc_users WHERE ' . uc_users_code_predicate('code');
     $params = [$code];
 
     if ($q !== '') {
@@ -530,12 +561,14 @@ if ($relativePath === '/fases' && $method === 'GET') {
     $q = trim((string)($_GET['q'] ?? ''));
 
     $sql = 'SELECT f.fase_id, f.fase, f.data_inicio, f.previsao_finalizacao, f.data_finalizacao, f.responsavel_id,
-                   f.status, f.valor_total, f.valor_parcial, f.notas, f.created_at, f.updated_at,
-                   u.nome AS responsavel_nome
+                   f.status, f.valor_previsao, f.notas, f.created_at, f.updated_at,
+                   u.nome AS responsavel_nome,
+                   COALESCE(SUM(ft.total), 0) AS valor_atual
             FROM uc_fases f
-            LEFT JOIN uc_users u ON u.user_id = f.responsavel_id AND JSON_CONTAINS(u.code, JSON_QUOTE(?))
-            WHERE f.code = ?';
-    $params = [$code, $code];
+            LEFT JOIN uc_users u ON u.user_id = f.responsavel_id AND ' . uc_users_code_predicate('u.code') . '
+            LEFT JOIN uc_faturas ft ON ft.fase_id = f.fase_id AND ' . uc_code_predicate_for_table('uc_faturas', 'ft.code') . '
+            WHERE ' . uc_code_predicate_for_table('uc_fases', 'f.code');
+    $params = [$code, $code, $code];
 
     if ($q !== '') {
         $sql .= ' AND (LOWER(f.fase) LIKE ? OR LOWER(u.nome) LIKE ?)';
@@ -543,8 +576,14 @@ if ($relativePath === '/fases' && $method === 'GET') {
         $params[] = $like;
         $params[] = $like;
     }
+    $statusFilter = trim((string)($_GET['status'] ?? ''));
+    if ($statusFilter !== '') {
+        $sql .= ' AND f.status = ?';
+        $params[] = $statusFilter;
+    }
 
-    $sql .= ' ORDER BY f.data_inicio ASC';
+    $sql .= ' GROUP BY f.fase_id, f.fase, f.data_inicio, f.previsao_finalizacao, f.data_finalizacao, f.responsavel_id, f.status, f.valor_previsao, f.notas, f.created_at, f.updated_at, u.nome
+              ORDER BY f.data_inicio ASC';
     $rows = fetch_all($sql, $params);
     $items = array_map(fn ($r) => [
         'faseId' => (string)$r['fase_id'],
@@ -555,13 +594,76 @@ if ($relativePath === '/fases' && $method === 'GET') {
         'dataFinalizacao' => $r['data_finalizacao'] !== null ? (string)$r['data_finalizacao'] : null,
         'responsavelId' => $r['responsavel_id'] !== null ? (string)$r['responsavel_id'] : null,
         'responsavelNome' => $r['responsavel_nome'] !== null ? (string)$r['responsavel_nome'] : null,
-        'valorTotal' => (string)$r['valor_total'],
-        'valorParcial' => (string)$r['valor_parcial'],
+        'valorPrevisao' => (string)$r['valor_previsao'],
+        'valorAtual' => (string)$r['valor_atual'],
         'notas' => $r['notas'] !== null ? (string)$r['notas'] : null,
         'createdAt' => (string)$r['created_at'],
         'updatedAt' => (string)$r['updated_at'],
     ], $rows);
     json_response(['items' => $items]);
+    exit;
+}
+
+if ($relativePath === '/home/summary' && $method === 'GET') {
+    require_authenticated_user_id();
+    $code = require_active_obra_codigo();
+
+    $faseCountsRows = fetch_all(
+        'SELECT status, COUNT(*) AS c
+         FROM uc_fases
+         WHERE ' . uc_code_predicate_for_table('uc_fases', 'code') . '
+         GROUP BY status',
+        [$code]
+    );
+    $faseCounts = [
+        'ABERTO' => 0,
+        'ANDAMENTO' => 0,
+        'PENDENTE' => 0,
+        'FINALIZADO' => 0,
+    ];
+    foreach ($faseCountsRows as $r) {
+        $st = strtoupper((string)($r['status'] ?? ''));
+        if ($st !== '' && array_key_exists($st, $faseCounts)) {
+            $faseCounts[$st] = (int)($r['c'] ?? 0);
+        }
+    }
+
+    $faturaCountsRows = fetch_all(
+        'SELECT pagamento, COUNT(*) AS c
+         FROM uc_faturas
+         WHERE ' . uc_code_predicate_for_table('uc_faturas', 'code') . ' AND status = ?
+         GROUP BY pagamento',
+        [$code, 'ATIVO']
+    );
+    $faturaCounts = [
+        'aberto' => 0,
+        'pendente' => 0,
+        'pago' => 0,
+    ];
+    foreach ($faturaCountsRows as $r) {
+        $pg = strtolower((string)($r['pagamento'] ?? ''));
+        if ($pg !== '' && array_key_exists($pg, $faturaCounts)) {
+            $faturaCounts[$pg] = (int)($r['c'] ?? 0);
+        }
+    }
+
+    $userRow = fetch_one(
+        'SELECT COUNT(*) AS c FROM uc_users WHERE ' . uc_users_code_predicate('code'),
+        [$code]
+    );
+    $usuariosTotal = $userRow ? (int)($userRow['c'] ?? 0) : 0;
+
+    json_response([
+        'activeCode' => $code,
+        'fases' => [
+            'abertas' => $faseCounts['ABERTO'],
+            'andamentos' => $faseCounts['ANDAMENTO'],
+            'pendentes' => $faseCounts['PENDENTE'],
+            'finalizadas' => $faseCounts['FINALIZADO'],
+        ],
+        'faturas' => $faturaCounts,
+        'usuariosTotal' => $usuariosTotal,
+    ]);
     exit;
 }
 
@@ -581,9 +683,9 @@ if ($relativePath === '/faturas' && $method === 'GET') {
                    ue.nome AS empresa_nome
             FROM uc_faturas ft
             LEFT JOIN uc_fases f ON f.fase_id = ft.fase_id
-            LEFT JOIN uc_users ur ON ur.user_id = ft.responsavel_id AND JSON_CONTAINS(ur.code, JSON_QUOTE(?))
-            LEFT JOIN uc_users ue ON ue.user_id = ft.empresa_id AND JSON_CONTAINS(ue.code, JSON_QUOTE(?))
-            WHERE ft.code = ?';
+            LEFT JOIN uc_users ur ON ur.user_id = ft.responsavel_id AND ' . uc_users_code_predicate('ur.code') . '
+            LEFT JOIN uc_users ue ON ue.user_id = ft.empresa_id AND ' . uc_users_code_predicate('ue.code') . '
+            WHERE ' . uc_code_predicate_for_table('uc_faturas', 'ft.code');
     $params = [$code, $code, $code];
 
     if ($q !== '') {
@@ -646,7 +748,7 @@ if ($relativePath === '/cadastros' && $method === 'POST') {
     }
     if ($tipoUsuario === 'Owner') {
         $existingOwner = fetch_one(
-            'SELECT user_id FROM uc_users WHERE JSON_CONTAINS(code, JSON_QUOTE(?)) AND tipo_usuario = ? LIMIT 1',
+            'SELECT user_id FROM uc_users WHERE ' . uc_users_code_predicate('code') . ' AND tipo_usuario = ? LIMIT 1',
             [$code, 'Owner']
         );
         if ($existingOwner) {
@@ -688,9 +790,9 @@ if ($relativePath === '/cadastros' && $method === 'POST') {
 
     $pdo = Database::connection();
     try {
-        $stmt = $pdo->prepare('INSERT INTO uc_users (code, foto, tipo_usuario, nome, cpf_cnpj, telefone, endereco, email, notas, status, password_hash) VALUES (CAST(? AS JSON), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        $stmt = $pdo->prepare('INSERT INTO uc_users (code, foto, tipo_usuario, nome, cpf_cnpj, telefone, endereco, email, notas, status, password_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         $stmt->execute([
-            json_encode([$code], JSON_UNESCAPED_UNICODE),
+            $code,
             $foto,
             $tipoUsuario,
             $nome,
@@ -737,7 +839,7 @@ if (preg_match('#^/cadastros/([^/]+)$#', $relativePath, $m) && $method === 'PUT'
     }
 
     $existing = fetch_one(
-        'SELECT * FROM uc_users WHERE user_id = ? AND JSON_CONTAINS(code, JSON_QUOTE(?)) LIMIT 1',
+        'SELECT * FROM uc_users WHERE user_id = ? AND ' . uc_users_code_predicate('code') . ' LIMIT 1',
         [$userId, $code]
     );
     if (!$existing) {
@@ -754,7 +856,7 @@ if (preg_match('#^/cadastros/([^/]+)$#', $relativePath, $m) && $method === 'PUT'
     }
     if ($tipoUsuario === 'Owner') {
         $existingOwner = fetch_one(
-            'SELECT user_id FROM uc_users WHERE JSON_CONTAINS(code, JSON_QUOTE(?)) AND tipo_usuario = ? AND user_id != ? LIMIT 1',
+            'SELECT user_id FROM uc_users WHERE ' . uc_users_code_predicate('code') . ' AND tipo_usuario = ? AND user_id != ? LIMIT 1',
             [$code, 'Owner', (int)$userId]
         );
         if ($existingOwner) {
@@ -814,7 +916,7 @@ if (preg_match('#^/cadastros/([^/]+)$#', $relativePath, $m) && $method === 'PUT'
             $sql .= ', password_hash = ?';
             $params[] = password_hash('UnderConstruction', PASSWORD_DEFAULT);
         }
-        $sql .= ' WHERE user_id = ? AND JSON_CONTAINS(code, JSON_QUOTE(?))';
+        $sql .= ' WHERE user_id = ? AND ' . uc_users_code_predicate('code');
         $params[] = $userId;
         $params[] = $code;
 
@@ -829,7 +931,7 @@ if (preg_match('#^/cadastros/([^/]+)$#', $relativePath, $m) && $method === 'PUT'
     }
 
     $row = fetch_one(
-        'SELECT user_id, foto, tipo_usuario, nome, cpf_cnpj, telefone, endereco, email, notas, status, created_at, updated_at FROM uc_users WHERE user_id = ? AND JSON_CONTAINS(code, JSON_QUOTE(?)) LIMIT 1',
+        'SELECT user_id, foto, tipo_usuario, nome, cpf_cnpj, telefone, endereco, email, notas, status, created_at, updated_at FROM uc_users WHERE user_id = ? AND ' . uc_users_code_predicate('code') . ' LIMIT 1',
         [$userId, $code]
     );
     json_response([
@@ -865,7 +967,7 @@ if (preg_match('#^/cadastros/(\\d+)$#', $relativePath, $m) && $method === 'DELET
     verify_current_user_password($password);
 
     $row = fetch_one(
-        'SELECT user_id FROM uc_users WHERE user_id = ? AND JSON_CONTAINS(code, JSON_QUOTE(?)) LIMIT 1',
+        'SELECT user_id FROM uc_users WHERE user_id = ? AND ' . uc_users_code_predicate('code') . ' LIMIT 1',
         [$targetId, $code]
     );
     if (!$row) {
@@ -874,7 +976,7 @@ if (preg_match('#^/cadastros/(\\d+)$#', $relativePath, $m) && $method === 'DELET
     }
 
     $pdo = Database::connection();
-    $stmt = $pdo->prepare('DELETE FROM uc_users WHERE user_id = ? AND JSON_CONTAINS(code, JSON_QUOTE(?))');
+    $stmt = $pdo->prepare('DELETE FROM uc_users WHERE user_id = ? AND ' . uc_users_code_predicate('code'));
     $stmt->execute([$targetId, $code]);
     http_response_code(204);
     exit;
@@ -907,15 +1009,11 @@ if ($relativePath === '/fases' && $method === 'POST') {
     if ($responsavelIdRaw !== null && ctype_digit($responsavelIdRaw)) {
         $responsavelId = (int)$responsavelIdRaw;
     }
-    $valorTotal = normalize_decimal($payload['valor_total'] ?? null, 'valor_total', 2, true);
-    $valorParcial = normalize_decimal($payload['valor_parcial'] ?? null, 'valor_parcial', 2, true);
-    if ((float)$valorParcial > (float)$valorTotal) {
-        fail_validation('valor_parcial', 'Valor parcial não pode ser maior que o valor total');
-    }
+    $valorPrevisao = normalize_decimal($payload['valor_previsao'] ?? null, 'valor_previsao', 2, true);
     $notas = optional_string($payload['notas'] ?? null);
 
     $pdo = Database::connection();
-    $stmt = $pdo->prepare('INSERT INTO uc_fases (code, fase, status, data_inicio, previsao_finalizacao, data_finalizacao, responsavel_id, valor_total, valor_parcial, notas) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    $stmt = $pdo->prepare('INSERT INTO uc_fases (code, fase, status, data_inicio, previsao_finalizacao, data_finalizacao, responsavel_id, valor_previsao, notas) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
     $stmt->execute([
         $code,
         $fase,
@@ -924,8 +1022,7 @@ if ($relativePath === '/fases' && $method === 'POST') {
         $previsaoFinalizacao,
         $dataFinalizacao,
         $responsavelId,
-        $valorTotal,
-        $valorParcial,
+        $valorPrevisao,
         $notas,
     ]);
 
@@ -973,15 +1070,11 @@ if (preg_match('#^/fases/(\\d+)$#', $relativePath, $m) && $method === 'PUT') {
         $responsavelId = (int)$responsavelIdRaw;
     }
 
-    $valorTotal = normalize_decimal($payload['valor_total'] ?? null, 'valor_total', 2, true);
-    $valorParcial = normalize_decimal($payload['valor_parcial'] ?? null, 'valor_parcial', 2, true);
-    if ((float)$valorParcial > (float)$valorTotal) {
-        fail_validation('valor_parcial', 'Valor parcial não pode ser maior que o valor total');
-    }
+    $valorPrevisao = normalize_decimal($payload['valor_previsao'] ?? null, 'valor_previsao', 2, true);
     $notas = optional_string($payload['notas'] ?? null);
 
     $pdo = Database::connection();
-    $stmt = $pdo->prepare('UPDATE uc_fases SET fase = ?, status = ?, data_inicio = ?, previsao_finalizacao = ?, data_finalizacao = ?, responsavel_id = ?, valor_total = ?, valor_parcial = ?, notas = ? WHERE fase_id = ? AND code = ?');
+    $stmt = $pdo->prepare('UPDATE uc_fases SET fase = ?, status = ?, data_inicio = ?, previsao_finalizacao = ?, data_finalizacao = ?, responsavel_id = ?, valor_previsao = ?, notas = ? WHERE fase_id = ? AND code = ?');
     $stmt->execute([
         $fase,
         $status,
@@ -989,8 +1082,7 @@ if (preg_match('#^/fases/(\\d+)$#', $relativePath, $m) && $method === 'PUT') {
         $previsaoFinalizacao,
         $dataFinalizacao,
         $responsavelId,
-        $valorTotal,
-        $valorParcial,
+        $valorPrevisao,
         $notas,
         $faseId,
         $code,
@@ -1001,12 +1093,15 @@ if (preg_match('#^/fases/(\\d+)$#', $relativePath, $m) && $method === 'PUT') {
 
     $row = fetch_one(
         'SELECT f.fase_id, f.fase, f.status, f.data_inicio, f.previsao_finalizacao, f.data_finalizacao, f.responsavel_id,
-                f.valor_total, f.valor_parcial, f.notas, f.created_at, f.updated_at,
-                u.nome AS responsavel_nome
+                f.valor_previsao, f.notas, f.created_at, f.updated_at,
+                u.nome AS responsavel_nome,
+                COALESCE(SUM(ft.total), 0) AS valor_atual
          FROM uc_fases f
          LEFT JOIN uc_users u ON u.user_id = f.responsavel_id
-         WHERE f.fase_id = ? AND f.code = ? LIMIT 1',
-        [$faseId, $code]
+         LEFT JOIN uc_faturas ft ON ft.fase_id = f.fase_id AND ' . uc_code_predicate_for_table('uc_faturas', 'ft.code') . '
+         WHERE f.fase_id = ? AND f.code = ?
+         GROUP BY f.fase_id, f.fase, f.status, f.data_inicio, f.previsao_finalizacao, f.data_finalizacao, f.responsavel_id, f.valor_previsao, f.notas, f.created_at, f.updated_at, u.nome',
+        [$faseId, $code, $code]
     );
     json_response([
         'faseId' => (int)$row['fase_id'],
@@ -1017,8 +1112,8 @@ if (preg_match('#^/fases/(\\d+)$#', $relativePath, $m) && $method === 'PUT') {
         'dataFinalizacao' => $row['data_finalizacao'] !== null ? (string)$row['data_finalizacao'] : null,
         'responsavelId' => $row['responsavel_id'] !== null ? (int)$row['responsavel_id'] : null,
         'responsavelNome' => $row['responsavel_nome'] !== null ? (string)$row['responsavel_nome'] : null,
-        'valorTotal' => (string)$row['valor_total'],
-        'valorParcial' => (string)$row['valor_parcial'],
+        'valorPrevisao' => (string)$row['valor_previsao'],
+        'valorAtual' => (string)$row['valor_atual'],
         'notas' => $row['notas'] !== null ? (string)$row['notas'] : null,
         'createdAt' => (string)$row['created_at'],
         'updatedAt' => (string)$row['updated_at'],
@@ -1241,8 +1336,8 @@ if (preg_match('#^/faturas/(\\d+)$#', $relativePath, $m) && $method === 'PUT') {
                 ue.nome AS empresa_nome
          FROM uc_faturas ft
          LEFT JOIN uc_fases f ON f.fase_id = ft.fase_id
-         LEFT JOIN uc_users ur ON ur.user_id = ft.responsavel_id AND JSON_CONTAINS(ur.code, JSON_QUOTE(?))
-         LEFT JOIN uc_users ue ON ue.user_id = ft.empresa_id AND JSON_CONTAINS(ue.code, JSON_QUOTE(?))
+         LEFT JOIN uc_users ur ON ur.user_id = ft.responsavel_id AND ' . uc_users_code_predicate('ur.code') . '
+         LEFT JOIN uc_users ue ON ue.user_id = ft.empresa_id AND ' . uc_users_code_predicate('ue.code') . '
          WHERE ft.fatura_id = ? AND ft.code = ? LIMIT 1',
         [$code, $code, $faturaId, $code]
     );
@@ -1359,7 +1454,7 @@ if ($relativePath === '/obra' && $method === 'POST') {
     $responsavelIdRaw = optional_string($payload['responsavel_id'] ?? null);
     if ($responsavelIdRaw !== null && ctype_digit($responsavelIdRaw)) {
         $u = fetch_one(
-            'SELECT nome, tipo_usuario FROM uc_users WHERE user_id = ? AND JSON_CONTAINS(code, JSON_QUOTE(?)) LIMIT 1',
+            'SELECT nome, tipo_usuario FROM uc_users WHERE user_id = ? AND ' . uc_users_code_predicate('code') . ' LIMIT 1',
             [(int)$responsavelIdRaw, $codigo]
         );
         if (!$u || (string)$u['tipo_usuario'] !== 'Owner') {
@@ -1379,7 +1474,7 @@ if ($relativePath === '/obra' && $method === 'POST') {
     $engIdRaw = optional_string($payload['engenheiro_responsavel_id'] ?? null);
     if ($engIdRaw !== null && ctype_digit($engIdRaw)) {
         $u = fetch_one(
-            'SELECT nome, tipo_usuario FROM uc_users WHERE user_id = ? AND JSON_CONTAINS(code, JSON_QUOTE(?)) LIMIT 1',
+            'SELECT nome, tipo_usuario FROM uc_users WHERE user_id = ? AND ' . uc_users_code_predicate('code') . ' LIMIT 1',
             [(int)$engIdRaw, $codigo]
         );
         if (!$u || (string)$u['tipo_usuario'] !== 'Engenheiro') {
@@ -1447,7 +1542,7 @@ if ($relativePath === '/obra' && $method === 'PUT') {
     $responsavelIdRaw = optional_string($payload['responsavel_id'] ?? null);
     if ($responsavelIdRaw !== null && ctype_digit($responsavelIdRaw)) {
         $u = fetch_one(
-            'SELECT nome, tipo_usuario FROM uc_users WHERE user_id = ? AND JSON_CONTAINS(code, JSON_QUOTE(?)) LIMIT 1',
+            'SELECT nome, tipo_usuario FROM uc_users WHERE user_id = ? AND ' . uc_users_code_predicate('code') . ' LIMIT 1',
             [(int)$responsavelIdRaw, $codigo]
         );
         if (!$u || (string)$u['tipo_usuario'] !== 'Owner') {
@@ -1467,7 +1562,7 @@ if ($relativePath === '/obra' && $method === 'PUT') {
     $engIdRaw = optional_string($payload['engenheiro_responsavel_id'] ?? null);
     if ($engIdRaw !== null && ctype_digit($engIdRaw)) {
         $u = fetch_one(
-            'SELECT nome, tipo_usuario FROM uc_users WHERE user_id = ? AND JSON_CONTAINS(code, JSON_QUOTE(?)) LIMIT 1',
+            'SELECT nome, tipo_usuario FROM uc_users WHERE user_id = ? AND ' . uc_users_code_predicate('code') . ' LIMIT 1',
             [(int)$engIdRaw, $codigo]
         );
         if (!$u || (string)$u['tipo_usuario'] !== 'Engenheiro') {

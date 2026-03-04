@@ -14,14 +14,10 @@ const schema = z
     previsao_finalizacao: z.string().min(1, 'Previsão obrigatória'),
     data_finalizacao: z.string().optional(),
     responsavel_id: z.string().optional(),
-    valor_total: z.coerce.number().nonnegative('Valor total inválido'),
-    valor_parcial: z.coerce.number().nonnegative('Valor parcial inválido'),
+    valor_previsao: z.coerce.number().nonnegative('Valor previsão inválido'),
     notas: z.string().optional()
   })
-  .refine((v) => v.valor_parcial <= v.valor_total, {
-    message: 'Valor parcial não pode ser maior que o valor total',
-    path: ['valor_parcial']
-  });
+  ;
 
 type FormValues = z.infer<typeof schema>;
 
@@ -41,6 +37,14 @@ function toDateOnlyLocal(value?: string | null) {
   if (Number.isNaN(d.getTime())) return '';
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function statusColor(status?: string) {
+  const s = (status || '').toUpperCase();
+  if (s === 'ABERTO') return '#d4aa00'; // amarelo
+  if (s === 'PENDENTE') return '#d33'; // vermelho
+  if (s === 'FINALIZADO') return '#229954'; // verde
+  return 'inherit';
 }
 
 function PencilIcon({ title = 'Editar' }: { title?: string }) {
@@ -73,6 +77,7 @@ export default function FasesPage() {
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [q, setQ] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [users, setUsers] = useState<UserOption[]>([]);
   const [optionsError, setOptionsError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -88,8 +93,7 @@ export default function FasesPage() {
       previsao_finalizacao: '',
       data_finalizacao: '',
       responsavel_id: '',
-      valor_total: 0,
-      valor_parcial: 0,
+      valor_previsao: 0,
       notas: ''
     }),
     []
@@ -106,6 +110,7 @@ export default function FasesPage() {
     try {
       const params = new URLSearchParams();
       if (q.trim()) params.set('q', q.trim());
+      if (statusFilter) params.set('status', statusFilter);
       const res = await apiFetch<{ items: any[] }>(`/fases?${params.toString()}`, { method: 'GET' });
       setRows(res.items || []);
     } catch (e) {
@@ -167,12 +172,13 @@ export default function FasesPage() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        <input className="input" placeholder="Data início (filtro depois)" disabled />
-        <select className="input" defaultValue="" disabled>
+        <div />
+        <select className="input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="">Status (todos)</option>
-          <option value="ABERTA">Aberta</option>
+          <option value="ABERTO">Aberto</option>
+          <option value="ANDAMENTO">Andamento</option>
           <option value="PENDENTE">Pendente</option>
-          <option value="FINALIZADA">Finalizada</option>
+          <option value="FINALIZADO">Finalizado</option>
         </select>
         <button className="btn" onClick={() => load()} disabled={loading}>
           Filtrar
@@ -188,26 +194,27 @@ export default function FasesPage() {
               <th style={{ padding: 10 }}>Previsão</th>
               <th style={{ padding: 10 }}>Finalização</th>
               <th style={{ padding: 10 }}>Responsável</th>
-              <th style={{ padding: 10 }}>Valor total</th>
+              <th style={{ padding: 10 }}>Status</th>
+              <th style={{ padding: 10 }}>Valor Atual</th>
               <th style={{ padding: 10 }}>Ações</th>
             </tr>
           </thead>
           <tbody>
             {listError ? (
               <tr>
-                <td colSpan={7} style={{ padding: 12, color: 'var(--danger)' }}>
+                <td colSpan={8} style={{ padding: 12, color: 'var(--danger)' }}>
                   {listError}
                 </td>
               </tr>
             ) : loading ? (
               <tr>
-                <td colSpan={7} style={{ padding: 12, opacity: 0.7 }}>
+                <td colSpan={8} style={{ padding: 12, opacity: 0.7 }}>
                   Carregando...
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ padding: 12, opacity: 0.7 }}>
+                <td colSpan={8} style={{ padding: 12, opacity: 0.7 }}>
                   Nenhuma fase encontrada.
                 </td>
               </tr>
@@ -219,7 +226,8 @@ export default function FasesPage() {
                   <td style={{ padding: 10 }}>{formatBrDate(r.previsaoFinalizacao)}</td>
                   <td style={{ padding: 10 }}>{r.dataFinalizacao ? formatBrDate(r.dataFinalizacao) : '-'}</td>
                   <td style={{ padding: 10 }}>{r.responsavelNome || '-'}</td>
-                  <td style={{ padding: 10 }}>{r.valorTotal}</td>
+                  <td style={{ padding: 10, color: statusColor(r.status), fontWeight: 600 }}>{r.status}</td>
+                  <td style={{ padding: 10 }}>{r.valorAtual ?? '-'}</td>
                   <td style={{ padding: 10 }}>
                     <button
                       className="btn"
@@ -236,8 +244,7 @@ export default function FasesPage() {
                           previsao_finalizacao: toDateOnlyLocal(r.previsaoFinalizacao),
                           data_finalizacao: toDateOnlyLocal(r.dataFinalizacao),
                           responsavel_id: r.responsavelId ? String(r.responsavelId) : '',
-                          valor_total: Number(r.valorTotal || 0),
-                          valor_parcial: Number(r.valorParcial || 0),
+                          valor_previsao: Number(r.valorPrevisao || 0),
                           notas: r.notas || ''
                         });
                         setOpen(true);
@@ -365,18 +372,10 @@ export default function FasesPage() {
           </label>
 
           <label>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>Valor total</div>
-            <input className="input" type="number" step="0.01" {...form.register('valor_total')} />
-            {form.formState.errors.valor_total && (
-              <div style={{ color: 'var(--danger)', fontSize: 12 }}>{form.formState.errors.valor_total.message}</div>
-            )}
-          </label>
-
-          <label>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>Valor parcial</div>
-            <input className="input" type="number" step="0.01" {...form.register('valor_parcial')} />
-            {form.formState.errors.valor_parcial && (
-              <div style={{ color: 'var(--danger)', fontSize: 12 }}>{form.formState.errors.valor_parcial.message}</div>
+            <div style={{ fontSize: 12, opacity: 0.8 }}>Valor previsão</div>
+            <input className="input" type="number" step="0.01" {...form.register('valor_previsao')} />
+            {form.formState.errors.valor_previsao && (
+              <div style={{ color: 'var(--danger)', fontSize: 12 }}>{form.formState.errors.valor_previsao.message}</div>
             )}
           </label>
 

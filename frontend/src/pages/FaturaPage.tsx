@@ -93,6 +93,14 @@ function nowLocalDatetime() {
   )}`;
 }
 
+function pagamentoColor(value?: string) {
+  const v = (value || '').toLowerCase();
+  if (v === 'aberto') return '#d4aa00'; // amarelo
+  if (v === 'pendente') return '#d33'; // vermelho
+  if (v === 'pago') return '#229954'; // verde
+  return 'inherit';
+}
+
 export default function FaturaPage() {
   const { user } = useAuth();
   const canWrite = ['Owner', 'Engenheiro', 'Gerente'].includes(user?.tipoUsuario || '');
@@ -111,6 +119,7 @@ export default function FaturaPage() {
   const [listError, setListError] = useState<string | null>(null);
   const [q, setQ] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [faseFilter, setFaseFilter] = useState('');
 
   const defaults = useMemo<FormValues>(
     () => ({
@@ -147,6 +156,7 @@ export default function FaturaPage() {
       const params = new URLSearchParams();
       if (q.trim()) params.set('q', q.trim());
       if (statusFilter) params.set('pagamento', statusFilter);
+      if (faseFilter) params.set('fase_id', faseFilter);
       const res = await apiFetch<{ items: any[] }>(`/faturas?${params.toString()}`, { method: 'GET' });
       setRows(res.items || []);
     } catch (e) {
@@ -220,7 +230,14 @@ export default function FaturaPage() {
           <option value="pendente">Pendente</option>
           <option value="pago">Pago</option>
         </select>
-        <input className="input" placeholder="Data (filtro depois)" disabled />
+        <select className="input" value={faseFilter} onChange={(e) => setFaseFilter(e.target.value)}>
+          <option value="">Fase (todas)</option>
+          {fases.map((f) => (
+            <option key={f.faseId} value={f.faseId}>
+              {f.fase}
+            </option>
+          ))}
+        </select>
         <button className="btn" onClick={() => load()} disabled={loading}>
           Filtrar
         </button>
@@ -231,31 +248,31 @@ export default function FaturaPage() {
           <thead>
             <tr style={{ textAlign: 'left', opacity: 0.8 }}>
               <th style={{ padding: 10 }}>Descrição</th>
+              <th style={{ padding: 10 }}>Fase</th>
               <th style={{ padding: 10 }}>Data</th>
               <th style={{ padding: 10 }}>Quantidade</th>
               <th style={{ padding: 10 }}>Valor</th>
               <th style={{ padding: 10 }}>Total</th>
               <th style={{ padding: 10 }}>Pagamento</th>
-              <th style={{ padding: 10 }}>Fase</th>
               <th style={{ padding: 10 }}>Ações</th>
             </tr>
           </thead>
           <tbody>
             {listError ? (
               <tr>
-                <td colSpan={7} style={{ padding: 12, color: 'var(--danger)' }}>
+                <td colSpan={8} style={{ padding: 12, color: 'var(--danger)' }}>
                   {listError}
                 </td>
               </tr>
             ) : loading ? (
               <tr>
-                <td colSpan={7} style={{ padding: 12, opacity: 0.7 }}>
+                <td colSpan={8} style={{ padding: 12, opacity: 0.7 }}>
                   Carregando...
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ padding: 12, opacity: 0.7 }}>
+                <td colSpan={8} style={{ padding: 12, opacity: 0.7 }}>
                   Nenhuma fatura encontrada.
                 </td>
               </tr>
@@ -263,12 +280,12 @@ export default function FaturaPage() {
               rows.map((r) => (
                 <tr key={r.faturaId} style={{ borderTop: '1px solid var(--border)' }}>
                   <td style={{ padding: 10 }}>{r.fatura}</td>
+                  <td style={{ padding: 10, opacity: 0.7, fontSize: 12 }}>{r.faseNome || '-'}</td>
                   <td style={{ padding: 10 }}>{formatBrDate(r.data)}</td>
                   <td style={{ padding: 10 }}>{r.quantidade}</td>
                   <td style={{ padding: 10 }}>{r.valor}</td>
                   <td style={{ padding: 10 }}>{r.total}</td>
-                  <td style={{ padding: 10 }}>{r.pagamento}</td>
-                  <td style={{ padding: 10, opacity: 0.7, fontSize: 12 }}>{r.faseNome || '-'}</td>
+                  <td style={{ padding: 10, color: pagamentoColor(r.pagamento), fontWeight: 600 }}>{r.pagamento}</td>
                   <td style={{ padding: 10 }}>
                     <button
                       className="btn"
