@@ -7,7 +7,8 @@ const items: Item[] = [
   { to: '/obra', label: 'Obra', icon: '🏡' },
   { to: '/cadastros', label: 'Usuarios', icon: '👤' },
   { to: '/fases', label: 'Fases', icon: '🏗️' },
-  { to: '/fatura', label: 'Faturas', icon: '🧾' }
+  { to: '/fatura', label: 'Faturas', icon: '🧾' },
+  { to: '/documentacoes', label: 'Documentações', icon: '📄' }
 ];
 
 export function Sidebar({

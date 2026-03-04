@@ -194,12 +194,131 @@ function require_privileged_role(): void
         exit;
     }
     $tipo = (string)($row['tipo_usuario'] ?? '');
-    $allowed = ['Owner', 'Engenheiro', 'Gerente'];
+    $allowed = ['Owner', 'Proprietario', 'Gerente', 'Engenheiro'];
     if (!in_array($tipo, $allowed, true)) {
         json_response(['detail' => 'Sem permissão.'], 403);
         exit;
     }
 }
+
+$FASES_FIXAS = [
+    '01 - Estudo e Planejamento' => [
+        '01.01 - Levantamento do terreno',
+        '01.02 - Levantamento topográfico',
+        '01.03 - Sondagem do solo (SPT)',
+        '01.04 - Estudo de viabilidade da obra',
+        '01.05 - Definição do programa da obra',
+        '01.06 - Estimativa inicial de custo',
+    ],
+    '02 - Projetos Técnicos' => [
+        '02.01 - Projeto arquitetônico',
+        '02.02 - Projeto estrutural',
+        '02.03 - Projeto elétrico',
+        '02.04 - Projeto hidráulico',
+        '02.05 - Projeto sanitário',
+        '02.06 - Projeto de águas pluviais',
+        '02.07 - Projeto de fundação',
+        '02.08 - Projeto de cobertura',
+        '02.09 - Compatibilização de projetos',
+    ],
+    '03 - Aprovações e Documentação' => [
+        '03.01 - Aprovação do projeto na prefeitura',
+        '03.02 - Emissão do alvará de construção',
+        '03.03 - Registro da ART no CREA',
+        '03.04 - Cadastro da obra no CNO/INSS',
+        '03.05 - Elaboração do PGRCC',
+    ],
+    '04 - Preparação da Obra' => [
+        '04.01 - Limpeza do terreno',
+        '04.02 - Terraplanagem',
+        '04.03 - Marcação da obra (gabarito)',
+        '04.04 - Instalação do canteiro de obras',
+        '04.05 - Ligação provisória de água',
+        '04.06 - Ligação provisória de energia',
+    ],
+    '05 - Fundação' => [
+        '05.01 - Escavação das fundações',
+        '05.02 - Execução de estacas ou brocas',
+        '05.03 - Execução de sapatas ou blocos',
+        '05.04 - Execução de vigas baldrame',
+        '05.05 - Impermeabilização da fundação',
+        '05.06 - Aterro e compactação',
+    ],
+    '06 - Estrutura' => [
+        '06.01 - Execução de pilares',
+        '06.02 - Execução de vigas estruturais',
+        '06.03 - Execução de lajes',
+        '06.04 - Execução de escadas',
+        '06.05 - Cura do concreto',
+    ],
+    '07 - Alvenaria' => [
+        '07.01 - Levantamento de paredes externas',
+        '07.02 - Levantamento de paredes internas',
+        '07.03 - Execução de vergas',
+        '07.04 - Execução de contravergas',
+        '07.05 - Amarrações estruturais',
+    ],
+    '08 - Cobertura' => [
+        '08.01 - Estrutura do telhado',
+        '08.02 - Instalação de caibros e ripas',
+        '08.03 - Instalação das telhas',
+        '08.04 - Instalação de cumeeiras',
+        '08.05 - Instalação de calhas',
+        '08.06 - Instalação de rufos',
+    ],
+    '09 - Instalações' => [
+        '09.01 - Infraestrutura elétrica',
+        '09.02 - Infraestrutura hidráulica',
+        '09.03 - Instalação de rede de esgoto',
+        '09.04 - Instalação de rede de água fria',
+        '09.05 - Instalação de água quente',
+        '09.06 - Sistema de drenagem',
+    ],
+    '10 - Fechamentos' => [
+        '10.01 - Instalação de portas',
+        '10.02 - Instalação de janelas',
+        '10.03 - Instalação de portões',
+    ],
+    '11 - Revestimentos' => [
+        '11.01 - Execução de chapisco',
+        '11.02 - Execução de emboço',
+        '11.03 - Execução de reboco',
+        '11.04 - Instalação de gesso ou drywall',
+        '11.05 - Regularização de pisos',
+    ],
+    '12 - Acabamentos' => [
+        '12.01 - Instalação de pisos',
+        '12.02 - Instalação de revestimentos cerâmicos',
+        '12.03 - Pintura interna',
+        '12.04 - Pintura externa',
+        '12.05 - Instalação de rodapés',
+        '12.06 - Instalação de forros',
+    ],
+    '13 - Instalações Finais' => [
+        '13.01 - Instalação de tomadas',
+        '13.02 - Instalação de interruptores',
+        '13.03 - Instalação de luminárias',
+        '13.04 - Instalação de louças sanitárias',
+        '13.05 - Instalação de metais (torneiras e registros)',
+        '13.06 - Instalação de chuveiros',
+    ],
+    '14 - Área Externa' => [
+        '14.01 - Execução de calçadas',
+        '14.02 - Execução de garagem',
+        '14.03 - Construção de muros',
+        '14.04 - Instalação de portão',
+        '14.05 - Paisagismo',
+    ],
+    '15 - Finalização' => [
+        '15.01 - Limpeza final da obra',
+        '15.02 - Testes das instalações',
+        '15.03 - Vistoria final',
+        '15.04 - Emissão do habite-se',
+        '15.05 - Entrega da obra',
+    ],
+];
+
+$DOC_STATUS = ['ABERTO', 'ANDAMENTO', 'PENDENTE', 'FINALIZADO'];
 
 function require_obra_cadastrada(): void
 {
@@ -257,6 +376,94 @@ if ($relativePath === '/upload-foto' && $method === 'POST') {
     }
     if ($ext === null) {
         json_response(['detail' => 'Formato de imagem não suportado. Use JPG, PNG ou WEBP.'], 415);
+        exit;
+    }
+
+    $destDir = __DIR__ . '/uploads';
+    if (!is_dir($destDir)) {
+        mkdir($destDir, 0755, true);
+    }
+
+    $filename = uuid_v4() . $ext;
+    $destPath = $destDir . '/' . $filename;
+
+    if (!move_uploaded_file($file['tmp_name'], $destPath)) {
+        json_response(['detail' => 'Não foi possível salvar o arquivo.'], 500);
+        exit;
+    }
+
+    $publicPath = '/api/uploads/' . $filename;
+    json_response([
+        'filename' => $filename,
+        'path' => 'uploads/' . $filename,
+        'url' => $publicPath,
+        'mime' => $mime,
+        'size' => (int)$file['size'],
+    ], 201);
+    exit;
+}
+
+if ($relativePath === '/upload-documento' && $method === 'POST') {
+    require_authenticated_user_id();
+    require_active_obra_codigo();
+
+    if (!isset($_FILES['arquivo'])) {
+        json_response(['detail' => 'Arquivo "arquivo" é obrigatório (multipart/form-data).'], 400);
+        exit;
+    }
+
+    $file = $_FILES['arquivo'];
+    if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        json_response(['detail' => 'Falha no upload de arquivo.'], 400);
+        exit;
+    }
+
+    $maxSize = 10 * 1024 * 1024; // 10 MB
+    if (($file['size'] ?? 0) > $maxSize) {
+        json_response(['detail' => 'Arquivo muito grande (máx 10MB).'], 413);
+        exit;
+    }
+
+    $mime = null;
+    if (class_exists('finfo')) {
+        $finfo = new finfo(FILEINFO_MIME_TYPE);
+        $mime = $finfo->file($file['tmp_name']);
+    } elseif (function_exists('mime_content_type')) {
+        $mime = mime_content_type($file['tmp_name']);
+    }
+    if (!is_string($mime) || $mime === '') {
+        $mime = 'application/octet-stream';
+    }
+
+    $allowed = [
+        'image/jpeg' => '.jpg',
+        'image/png' => '.png',
+        'image/webp' => '.webp',
+        'application/pdf' => '.pdf',
+        'application/msword' => '.doc',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => '.docx',
+        'application/vnd.ms-excel' => '.xls',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' => '.xlsx',
+    ];
+    $ext = $allowed[$mime] ?? null;
+    if ($ext === null) {
+        $name = (string)($file['name'] ?? '');
+        $byName = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+        $map = [
+            'jpg' => '.jpg',
+            'jpeg' => '.jpg',
+            'png' => '.png',
+            'webp' => '.webp',
+            'pdf' => '.pdf',
+            'doc' => '.doc',
+            'docx' => '.docx',
+            'xls' => '.xls',
+            'xlsx' => '.xlsx',
+        ];
+        $ext = $map[$byName] ?? null;
+    }
+    if ($ext === null) {
+        json_response(['detail' => 'Formato não suportado. Use imagem, PDF, Word ou Excel.'], 415);
         exit;
     }
 
@@ -555,12 +762,13 @@ if ($relativePath === '/cadastros' && $method === 'GET') {
 }
 
 if ($relativePath === '/fases' && $method === 'GET') {
+    global $FASES_FIXAS;
     require_authenticated_user_id();
     $code = require_active_obra_codigo();
 
     $q = trim((string)($_GET['q'] ?? ''));
 
-    $sql = 'SELECT f.fase_id, f.fase, f.data_inicio, f.previsao_finalizacao, f.data_finalizacao, f.responsavel_id,
+    $sql = 'SELECT f.fase_id, f.fase, f.subfase, f.data_inicio, f.previsao_finalizacao, f.data_finalizacao, f.responsavel_id,
                    f.status, f.valor_previsao, f.notas, f.created_at, f.updated_at,
                    u.nome AS responsavel_nome,
                    COALESCE(SUM(ft.total), 0) AS valor_atual
@@ -582,12 +790,13 @@ if ($relativePath === '/fases' && $method === 'GET') {
         $params[] = $statusFilter;
     }
 
-    $sql .= ' GROUP BY f.fase_id, f.fase, f.data_inicio, f.previsao_finalizacao, f.data_finalizacao, f.responsavel_id, f.status, f.valor_previsao, f.notas, f.created_at, f.updated_at, u.nome
+    $sql .= ' GROUP BY f.fase_id, f.fase, f.subfase, f.data_inicio, f.previsao_finalizacao, f.data_finalizacao, f.responsavel_id, f.status, f.valor_previsao, f.notas, f.created_at, f.updated_at, u.nome
               ORDER BY f.data_inicio ASC';
     $rows = fetch_all($sql, $params);
     $items = array_map(fn ($r) => [
         'faseId' => (string)$r['fase_id'],
         'fase' => (string)$r['fase'],
+        'subfase' => (string)$r['subfase'],
         'status' => (string)($r['status'] ?? ''),
         'dataInicio' => (string)$r['data_inicio'],
         'previsaoFinalizacao' => (string)$r['previsao_finalizacao'],
@@ -667,6 +876,264 @@ if ($relativePath === '/home/summary' && $method === 'GET') {
     exit;
 }
 
+if ($relativePath === '/documentacoes' && $method === 'GET') {
+    require_authenticated_user_id();
+    $code = require_active_obra_codigo();
+
+    $q = trim((string)($_GET['q'] ?? ''));
+    $status = trim((string)($_GET['status'] ?? ''));
+    $fase = trim((string)($_GET['fase'] ?? ''));
+    $subfase = trim((string)($_GET['subfase'] ?? ''));
+
+    $sql = 'SELECT d.docs_id, d.documento, d.fase, d.subfase, d.valor, d.dados_pagamento, d.data_inclusao, d.data_entrega,
+                   d.status, d.responsavel_id, d.notas, d.arquivo_path, d.created_at, d.updated_at,
+                   u.nome AS responsavel_nome
+            FROM uc_documentacoes d
+            LEFT JOIN uc_users u ON u.user_id = d.responsavel_id AND ' . uc_users_code_predicate('u.code') . '
+            WHERE ' . uc_code_predicate_for_table('uc_documentacoes', 'd.code');
+    $params = [$code, $code];
+
+    if ($q !== '') {
+        $sql .= ' AND (LOWER(d.documento) LIKE ? OR LOWER(d.fase) LIKE ? OR LOWER(d.subfase) LIKE ? OR LOWER(u.nome) LIKE ?)';
+        $like = '%' . strtolower($q) . '%';
+        $params[] = $like;
+        $params[] = $like;
+        $params[] = $like;
+        $params[] = $like;
+    }
+    if ($status !== '') {
+        $sql .= ' AND d.status = ?';
+        $params[] = $status;
+    }
+    if ($fase !== '') {
+        $sql .= ' AND d.fase = ?';
+        $params[] = $fase;
+    }
+    if ($subfase !== '') {
+        $sql .= ' AND d.subfase = ?';
+        $params[] = $subfase;
+    }
+
+    $sql .= ' ORDER BY d.data_inclusao DESC, d.docs_id DESC';
+    $rows = fetch_all($sql, $params);
+    $items = array_map(fn ($r) => [
+        'docsId' => (int)$r['docs_id'],
+        'documento' => (string)$r['documento'],
+        'fase' => (string)$r['fase'],
+        'subfase' => (string)$r['subfase'],
+        'valor' => (string)$r['valor'],
+        'dadosPagamento' => $r['dados_pagamento'] !== null ? (string)$r['dados_pagamento'] : null,
+        'dataInclusao' => (string)$r['data_inclusao'],
+        'dataEntrega' => $r['data_entrega'] !== null ? (string)$r['data_entrega'] : null,
+        'status' => (string)$r['status'],
+        'responsavelId' => $r['responsavel_id'] !== null ? (string)$r['responsavel_id'] : null,
+        'responsavelNome' => $r['responsavel_nome'] !== null ? (string)$r['responsavel_nome'] : null,
+        'notas' => $r['notas'] !== null ? (string)$r['notas'] : null,
+        'arquivoPath' => $r['arquivo_path'] !== null ? (string)$r['arquivo_path'] : null,
+        'arquivoUrl' => $r['arquivo_path'] !== null ? '/api/' . ltrim((string)$r['arquivo_path'], '/') : null,
+        'createdAt' => (string)$r['created_at'],
+        'updatedAt' => (string)$r['updated_at'],
+    ], $rows);
+    json_response(['items' => $items]);
+    exit;
+}
+
+if ($relativePath === '/documentacoes' && $method === 'POST') {
+    require_authenticated_user_id();
+    require_privileged_role();
+    require_obra_cadastrada();
+    $code = require_active_obra_codigo();
+
+    $payload = parse_json_body();
+    require_password_confirmation($payload);
+
+    $documento = trim((string)($payload['documento'] ?? ''));
+    if ($documento === '') {
+        fail_validation('documento', 'Documento obrigatório');
+    }
+    $fase = trim((string)($payload['fase'] ?? ''));
+    if ($fase === '') {
+        fail_validation('fase', 'Fase obrigatória');
+    }
+    $subfase = trim((string)($payload['subfase'] ?? ''));
+    // Subfase é livre/opcional.
+
+    $status = trim((string)($payload['status'] ?? ''));
+    if (!in_array($status, $DOC_STATUS, true)) {
+        fail_validation('status', 'Status inválido');
+    }
+
+    $valor = normalize_decimal($payload['valor'] ?? null, 'valor', 2, true);
+    $dadosPagamento = optional_string($payload['dados_pagamento'] ?? ($payload['dadosPagamento'] ?? null));
+    $notas = optional_string($payload['notas'] ?? null);
+    $dataInclusao = parse_datetime_or_null($payload['data_inclusao'] ?? ($payload['dataInclusao'] ?? ''), 'data_inclusao', false) ?? now_datetime_ms();
+    $dataEntrega = parse_datetime_or_null($payload['data_entrega'] ?? ($payload['dataEntrega'] ?? ''), 'data_entrega', false);
+    $arquivoPath = optional_string($payload['arquivo_path'] ?? ($payload['arquivoPath'] ?? null));
+
+    $responsavelIdRaw = optional_string($payload['responsavel_id'] ?? ($payload['responsavelId'] ?? null));
+    if ($responsavelIdRaw === null || !ctype_digit($responsavelIdRaw)) {
+        fail_validation('responsavel_id', 'Responsável é obrigatório');
+    }
+    $responsavelId = (int)$responsavelIdRaw;
+
+    $now = now_datetime_ms();
+    $pdo = Database::connection();
+    try {
+        $stmt = $pdo->prepare('INSERT INTO uc_documentacoes (documento, fase, subfase, valor, dados_pagamento, data_inclusao, data_entrega, status, responsavel_id, notas, arquivo_path, created_at, updated_at, code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        $stmt->execute([
+            $documento,
+            $fase,
+            $subfase,
+            $valor,
+            $dadosPagamento,
+            $dataInclusao,
+            $dataEntrega,
+            $status,
+            $responsavelId,
+            $notas,
+            $arquivoPath,
+            $now,
+            $now,
+            $code,
+        ]);
+        $id = (int)$pdo->lastInsertId();
+    } catch (Throwable $e) {
+        json_response(['detail' => 'Erro ao salvar documentação', 'error' => $e->getMessage()], 500);
+        exit;
+    }
+
+    json_response([
+        'docsId' => $id,
+        'documento' => $documento,
+        'fase' => $fase,
+        'subfase' => $subfase,
+        'status' => $status,
+    ], 201);
+    exit;
+}
+
+if (preg_match('#^/documentacoes/(\\d+)$#', $relativePath, $m) && $method === 'PUT') {
+    require_authenticated_user_id();
+    require_privileged_role();
+    require_obra_cadastrada();
+    $code = require_active_obra_codigo();
+    $docsId = (int)$m[1];
+
+    $existing = fetch_one('SELECT * FROM uc_documentacoes WHERE docs_id = ? AND code = ? LIMIT 1', [$docsId, $code]);
+    if (!$existing) {
+        json_response(['detail' => 'Documentação não encontrada.'], 404);
+        exit;
+    }
+
+    $payload = parse_json_body();
+    require_password_confirmation($payload);
+
+    $documento = trim((string)($payload['documento'] ?? ''));
+    if ($documento === '') {
+        fail_validation('documento', 'Documento obrigatório');
+    }
+    $fase = trim((string)($payload['fase'] ?? ''));
+    if ($fase === '') {
+        fail_validation('fase', 'Fase obrigatória');
+    }
+    $subfase = trim((string)($payload['subfase'] ?? ''));
+    // Subfase é livre/opcional.
+
+    $status = trim((string)($payload['status'] ?? ''));
+    if (!in_array($status, $DOC_STATUS, true)) {
+        fail_validation('status', 'Status inválido');
+    }
+
+    $valor = normalize_decimal($payload['valor'] ?? null, 'valor', 2, true);
+    $dadosPagamento = optional_string($payload['dados_pagamento'] ?? ($payload['dadosPagamento'] ?? null));
+    $notas = optional_string($payload['notas'] ?? null);
+    $dataInclusao = parse_datetime_or_null($payload['data_inclusao'] ?? ($payload['dataInclusao'] ?? ''), 'data_inclusao', false) ?? (string)($existing['data_inclusao'] ?? now_datetime_ms());
+    $dataEntrega = parse_datetime_or_null($payload['data_entrega'] ?? ($payload['dataEntrega'] ?? ''), 'data_entrega', false);
+    $arquivoPath = optional_string($payload['arquivo_path'] ?? ($payload['arquivoPath'] ?? null)) ?? ($existing['arquivo_path'] ?? null);
+
+    $responsavelIdRaw = optional_string($payload['responsavel_id'] ?? ($payload['responsavelId'] ?? null));
+    if ($responsavelIdRaw === null || !ctype_digit($responsavelIdRaw)) {
+        fail_validation('responsavel_id', 'Responsável é obrigatório');
+    }
+    $responsavelId = (int)$responsavelIdRaw;
+
+    $pdo = Database::connection();
+    try {
+        $stmt = $pdo->prepare('UPDATE uc_documentacoes SET documento = ?, fase = ?, subfase = ?, valor = ?, dados_pagamento = ?, data_inclusao = ?, data_entrega = ?, status = ?, responsavel_id = ?, notas = ?, arquivo_path = ?, updated_at = ? WHERE docs_id = ? AND code = ?');
+        $stmt->execute([
+            $documento,
+            $fase,
+            $subfase,
+            $valor,
+            $dadosPagamento,
+            $dataInclusao,
+            $dataEntrega,
+            $status,
+            $responsavelId,
+            $notas,
+            $arquivoPath,
+            now_datetime_ms(),
+            $docsId,
+            $code,
+        ]);
+    } catch (Throwable $e) {
+        json_response(['detail' => 'Erro ao atualizar documentação', 'error' => $e->getMessage()], 500);
+        exit;
+    }
+
+    $row = fetch_one(
+        'SELECT d.docs_id, d.documento, d.fase, d.subfase, d.valor, d.dados_pagamento, d.data_inclusao, d.data_entrega,
+                d.status, d.responsavel_id, d.notas, d.arquivo_path, d.created_at, d.updated_at,
+                u.nome AS responsavel_nome
+         FROM uc_documentacoes d
+         LEFT JOIN uc_users u ON u.user_id = d.responsavel_id
+         WHERE d.docs_id = ? AND d.code = ?',
+        [$docsId, $code]
+    );
+    json_response([
+        'docsId' => (int)($row['docs_id'] ?? $docsId),
+        'documento' => $row['documento'] ?? $documento,
+        'fase' => $row['fase'] ?? $fase,
+        'subfase' => $row['subfase'] ?? $subfase,
+        'valor' => $row['valor'] ?? $valor,
+        'dadosPagamento' => $row['dados_pagamento'] ?? $dadosPagamento,
+        'dataInclusao' => $row['data_inclusao'] ?? $dataInclusao,
+        'dataEntrega' => $row['data_entrega'] ?? $dataEntrega,
+        'status' => $row['status'] ?? $status,
+        'responsavelId' => $row['responsavel_id'] ?? $responsavelId,
+        'responsavelNome' => $row['responsavel_nome'] ?? null,
+        'notas' => $row['notas'] ?? $notas,
+        'arquivoPath' => $row['arquivo_path'] ?? $arquivoPath,
+        'arquivoUrl' => ($row['arquivo_path'] ?? $arquivoPath) ? '/api/' . ltrim((string)($row['arquivo_path'] ?? $arquivoPath), '/') : null,
+        'createdAt' => $row['created_at'] ?? null,
+        'updatedAt' => $row['updated_at'] ?? null,
+    ]);
+    exit;
+}
+
+if (preg_match('#^/documentacoes/(\\d+)$#', $relativePath, $m) && $method === 'DELETE') {
+    require_authenticated_user_id();
+    require_privileged_role();
+    require_obra_cadastrada();
+    $code = require_active_obra_codigo();
+    $docsId = (int)$m[1];
+
+    $payload = parse_json_body();
+    require_password_confirmation($payload);
+
+    $row = fetch_one('SELECT docs_id FROM uc_documentacoes WHERE docs_id = ? AND code = ? LIMIT 1', [$docsId, $code]);
+    if (!$row) {
+        json_response(['detail' => 'Documentação não encontrada.'], 404);
+        exit;
+    }
+
+    $pdo = Database::connection();
+    $stmt = $pdo->prepare('DELETE FROM uc_documentacoes WHERE docs_id = ? AND code = ?');
+    $stmt->execute([$docsId, $code]);
+    http_response_code(204);
+    exit;
+}
+
 if ($relativePath === '/faturas' && $method === 'GET') {
     require_authenticated_user_id();
     $code = require_active_obra_codigo();
@@ -674,6 +1141,7 @@ if ($relativePath === '/faturas' && $method === 'GET') {
     $q = trim((string)($_GET['q'] ?? ''));
     $pagamento = trim((string)($_GET['pagamento'] ?? ''));
     $status = trim((string)($_GET['status'] ?? ''));
+    $faseId = trim((string)($_GET['fase_id'] ?? ''));
 
     $sql = 'SELECT ft.fatura_id, ft.data, ft.lancamento, ft.data_pagamento, ft.dados_pagamento, ft.nfe, ft.status, ft.pagamento,
                    ft.valor, ft.quantidade, ft.descricao, ft.total, ft.fase_id, ft.responsavel_id, ft.empresa_id,
@@ -703,6 +1171,10 @@ if ($relativePath === '/faturas' && $method === 'GET') {
     if ($status !== '') {
         $sql .= ' AND ft.status = ?';
         $params[] = $status;
+    }
+    if ($faseId !== '' && ctype_digit($faseId)) {
+        $sql .= ' AND ft.fase_id = ?';
+        $params[] = (int)$faseId;
     }
 
     $sql .= ' ORDER BY ft.data DESC, ft.lancamento DESC';
@@ -742,7 +1214,18 @@ if ($relativePath === '/cadastros' && $method === 'POST') {
     $payload = parse_json_body();
 
     $tipoUsuario = (string)($payload['tipo_usuario'] ?? '');
-    $allowedTipos = ['Pedreiro', 'Ajudante', 'FornecedorMateriais', 'Engenheiro', 'PrestadorServico', 'Gerente', 'Owner'];
+    $allowedTipos = [
+        'Owner',
+        'Proprietario',
+        'Gerente',
+        'Engenheiro',
+        'Arquiteto',
+        'Operacional',
+        'Pedreiro',
+        'Ajudante',
+        'Fornecedor',
+        'Fiscalizacao',
+    ];
     if (!in_array($tipoUsuario, $allowedTipos, true)) {
         fail_validation('tipo_usuario', 'Tipo de usuário inválido');
     }
@@ -983,6 +1466,7 @@ if (preg_match('#^/cadastros/(\\d+)$#', $relativePath, $m) && $method === 'DELET
 }
 
 if ($relativePath === '/fases' && $method === 'POST') {
+    global $FASES_FIXAS;
     require_authenticated_user_id();
     require_privileged_role();
     require_obra_cadastrada();
@@ -994,6 +1478,26 @@ if ($relativePath === '/fases' && $method === 'POST') {
     if ($fase === '') {
         fail_validation('fase', 'Fase obrigatória');
     }
+    if (!array_key_exists($fase, $FASES_FIXAS)) {
+        fail_validation('fase', 'Fase inválida');
+    }
+    $subfase = trim((string)($payload['subfase'] ?? ''));
+    $allowedSubs = $FASES_FIXAS[$fase] ?? [];
+    if ($subfase === '' && $allowedSubs !== []) {
+        $subfase = $allowedSubs[0];
+    }
+    if ($subfase === '' || !in_array($subfase, $allowedSubs, true)) {
+        fail_validation('subfase', 'Subfase inválida para esta fase');
+    }
+    $allowedSubs = $FASES_FIXAS[$fase] ?? [];
+    $subfase = trim((string)($payload['subfase'] ?? ''));
+    if ($subfase === '' && $allowedSubs !== []) {
+        $subfase = $allowedSubs[0];
+    }
+    if ($subfase === '' || !in_array($subfase, $allowedSubs, true)) {
+        fail_validation('subfase', 'Subfase inválida para esta fase');
+    }
+
     $status = (string)($payload['status'] ?? '');
     $allowedStatus = ['ABERTO', 'ANDAMENTO', 'PENDENTE', 'FINALIZADO'];
     if (!in_array($status, $allowedStatus, true)) {
@@ -1013,10 +1517,11 @@ if ($relativePath === '/fases' && $method === 'POST') {
     $notas = optional_string($payload['notas'] ?? null);
 
     $pdo = Database::connection();
-    $stmt = $pdo->prepare('INSERT INTO uc_fases (code, fase, status, data_inicio, previsao_finalizacao, data_finalizacao, responsavel_id, valor_previsao, notas) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    $stmt = $pdo->prepare('INSERT INTO uc_fases (code, fase, subfase, status, data_inicio, previsao_finalizacao, data_finalizacao, responsavel_id, valor_previsao, notas) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
     $stmt->execute([
         $code,
         $fase,
+        $subfase,
         $status,
         $dataInicio,
         $previsaoFinalizacao,
@@ -1036,6 +1541,7 @@ if ($relativePath === '/fases' && $method === 'POST') {
 }
 
 if (preg_match('#^/fases/(\\d+)$#', $relativePath, $m) && $method === 'PUT') {
+    global $FASES_FIXAS;
     require_authenticated_user_id();
     require_privileged_role();
     require_obra_cadastrada();
@@ -1053,6 +1559,17 @@ if (preg_match('#^/fases/(\\d+)$#', $relativePath, $m) && $method === 'PUT') {
     $fase = trim((string)($payload['fase'] ?? ''));
     if ($fase === '') {
         fail_validation('fase', 'Fase obrigatória');
+    }
+    if (!array_key_exists($fase, $FASES_FIXAS)) {
+        fail_validation('fase', 'Fase inválida');
+    }
+    $subfase = trim((string)($payload['subfase'] ?? ''));
+    $allowedSubs = $FASES_FIXAS[$fase] ?? [];
+    if ($subfase === '' && $allowedSubs !== []) {
+        $subfase = $allowedSubs[0];
+    }
+    if ($subfase === '' || !in_array($subfase, $allowedSubs, true)) {
+        fail_validation('subfase', 'Subfase inválida para esta fase');
     }
     $status = (string)($payload['status'] ?? '');
     $allowedStatus = ['ABERTO', 'ANDAMENTO', 'PENDENTE', 'FINALIZADO'];
@@ -1074,38 +1591,68 @@ if (preg_match('#^/fases/(\\d+)$#', $relativePath, $m) && $method === 'PUT') {
     $notas = optional_string($payload['notas'] ?? null);
 
     $pdo = Database::connection();
-    $stmt = $pdo->prepare('UPDATE uc_fases SET fase = ?, status = ?, data_inicio = ?, previsao_finalizacao = ?, data_finalizacao = ?, responsavel_id = ?, valor_previsao = ?, notas = ? WHERE fase_id = ? AND code = ?');
-    $stmt->execute([
-        $fase,
-        $status,
-        $dataInicio,
-        $previsaoFinalizacao,
-        $dataFinalizacao,
-        $responsavelId,
-        $valorPrevisao,
-        $notas,
-        $faseId,
-        $code,
-    ]);
+    try {
+        $stmt = $pdo->prepare('UPDATE uc_fases SET fase = ?, subfase = ?, status = ?, data_inicio = ?, previsao_finalizacao = ?, data_finalizacao = ?, responsavel_id = ?, valor_previsao = ?, notas = ? WHERE fase_id = ? AND code = ?');
+        $stmt->execute([
+            $fase,
+            $subfase,
+            $status,
+            $dataInicio,
+            $previsaoFinalizacao,
+            $dataFinalizacao,
+            $responsavelId,
+            $valorPrevisao,
+            $notas,
+            $faseId,
+            $code,
+        ]);
+    } catch (Throwable $e) {
+        json_response(['detail' => 'Erro ao atualizar fase', 'error' => $e->getMessage()], 500);
+        exit;
+    }
 
     // Observação: no schema atual, as faturas referenciam a fase por `fase_id` (FK),
     // então o "nome da fase" aparece automaticamente atualizado via JOIN — não existe coluna de nome na uc_faturas.
 
-    $row = fetch_one(
-        'SELECT f.fase_id, f.fase, f.status, f.data_inicio, f.previsao_finalizacao, f.data_finalizacao, f.responsavel_id,
-                f.valor_previsao, f.notas, f.created_at, f.updated_at,
-                u.nome AS responsavel_nome,
-                COALESCE(SUM(ft.total), 0) AS valor_atual
-         FROM uc_fases f
-         LEFT JOIN uc_users u ON u.user_id = f.responsavel_id
-         LEFT JOIN uc_faturas ft ON ft.fase_id = f.fase_id AND ' . uc_code_predicate_for_table('uc_faturas', 'ft.code') . '
-         WHERE f.fase_id = ? AND f.code = ?
-         GROUP BY f.fase_id, f.fase, f.status, f.data_inicio, f.previsao_finalizacao, f.data_finalizacao, f.responsavel_id, f.valor_previsao, f.notas, f.created_at, f.updated_at, u.nome',
-        [$faseId, $code, $code]
-    );
+    try {
+        $row = fetch_one(
+            'SELECT f.fase_id, f.fase, f.subfase, f.status, f.data_inicio, f.previsao_finalizacao, f.data_finalizacao, f.responsavel_id,
+                    f.valor_previsao, f.notas, f.created_at, f.updated_at,
+                    u.nome AS responsavel_nome,
+                    COALESCE(SUM(ft.total), 0) AS valor_atual
+             FROM uc_fases f
+             LEFT JOIN uc_users u ON u.user_id = f.responsavel_id
+             LEFT JOIN uc_faturas ft ON ft.fase_id = f.fase_id AND ' . uc_code_predicate_for_table('uc_faturas', 'ft.code') . '
+             WHERE f.fase_id = ? AND f.code = ?
+             GROUP BY f.fase_id, f.fase, f.subfase, f.status, f.data_inicio, f.previsao_finalizacao, f.data_finalizacao, f.responsavel_id, f.valor_previsao, f.notas, f.created_at, f.updated_at, u.nome',
+            [$faseId, $code]
+        );
+    } catch (Throwable $e) {
+        $row = false;
+    }
+    if ($row === false) {
+        // fallback: usa dados enviados, pois update já foi realizado
+        $row = [
+            'fase_id' => $faseId,
+            'fase' => $fase,
+            'subfase' => $subfase,
+            'status' => $status,
+            'data_inicio' => $dataInicio,
+            'previsao_finalizacao' => $previsaoFinalizacao,
+            'data_finalizacao' => $dataFinalizacao,
+            'responsavel_id' => $responsavelId,
+            'responsavel_nome' => null,
+            'valor_previsao' => $valorPrevisao,
+            'valor_atual' => '0',
+            'notas' => $notas,
+            'created_at' => $existing['created_at'] ?? now_datetime_ms(),
+            'updated_at' => now_datetime_ms(),
+        ];
+    }
     json_response([
         'faseId' => (int)$row['fase_id'],
         'fase' => (string)$row['fase'],
+        'subfase' => (string)$row['subfase'],
         'status' => (string)$row['status'],
         'dataInicio' => (string)$row['data_inicio'],
         'previsaoFinalizacao' => (string)$row['previsao_finalizacao'],

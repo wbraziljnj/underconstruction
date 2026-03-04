@@ -6,16 +6,42 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { apiFetch } from '../api/client';
 import { useAuth } from '../auth/auth';
 
+function maskCpfCnpj(value: string) {
+  const digits = value.replace(/\D/g, '');
+  if (digits.length <= 11) {
+    return digits
+      .replace(/^(\d{3})(\d)/, '$1.$2')
+      .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
+      .replace(/^(\d{3})\.(\d{3})\.(\d{3})(\d)/, '$1.$2.$3-$4');
+  }
+  return digits
+    .replace(/^(\d{2})(\d)/, '$1.$2')
+    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/^(\d{2})\.(\d{3})\.(\d{3})(\d)/, '$1.$2.$3/$4')
+    .replace(/^(\d{2})\.(\d{3})\.(\d{3})\/(\d{4})(\d)/, '$1.$2.$3/$4-$5');
+}
+
+function maskPhone(value: string) {
+  const digits = value.replace(/\D/g, '').slice(0, 11);
+  if (digits.length <= 10) {
+    return digits.replace(/^(\d{2})(\d{4})(\d{0,4})$/, '($1) $2-$3').trim();
+  }
+  return digits.replace(/^(\d{2})(\d{5})(\d{0,4})$/, '($1) $2-$3').trim();
+}
+
 const schema = z.object({
   foto: z.string().optional(),
   tipo_usuario: z.enum([
+    'Owner',
+    'Proprietario',
+    'Gerente',
+    'Engenheiro',
+    'Arquiteto',
+    'Operacional',
     'Pedreiro',
     'Ajudante',
-    'FornecedorMateriais',
-    'Engenheiro',
-    'PrestadorServico',
-    'Gerente',
-    'Owner'
+    'Fornecedor',
+    'Fiscalizacao'
   ]),
   nome: z.string().min(1, 'Nome obrigatório'),
   cpf_cnpj: z.string().min(1, 'CPF/CNPJ obrigatório'),
@@ -75,7 +101,7 @@ async function uploadFoto(file: File): Promise<UploadResponse> {
 
 export default function CadastrosPage() {
   const { user } = useAuth();
-  const canWrite = ['Owner', 'Engenheiro', 'Gerente'].includes(user?.tipoUsuario || '');
+  const canWrite = ['Owner', 'Proprietario', 'Gerente', 'Engenheiro'].includes(user?.tipoUsuario || '');
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<'create' | 'edit'>('create');
   const [editingRow, setEditingRow] = useState<any | null>(null);
@@ -164,13 +190,16 @@ export default function CadastrosPage() {
         />
         <select className="input" value={tipoFilter} onChange={(e) => setTipoFilter(e.target.value)}>
           <option value="">Tipo (todos)</option>
-          <option value="Pedreiro">Pedreiro</option>
           <option value="Ajudante">Ajudante</option>
-          <option value="FornecedorMateriais">Fornecedor Materiais</option>
+          <option value="Arquiteto">Arquiteto</option>
           <option value="Engenheiro">Engenheiro</option>
-          <option value="PrestadorServico">Prestador Serviço</option>
+          <option value="Fiscalizacao">Fiscalização</option>
+          <option value="Fornecedor">Fornecedor</option>
           <option value="Gerente">Gerente</option>
+          <option value="Operacional">Operacional</option>
           <option value="Owner">Owner</option>
+          <option value="Pedreiro">Pedreiro</option>
+          <option value="Proprietario">Proprietário</option>
         </select>
         <select className="input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="">Status (todos)</option>
@@ -219,8 +248,8 @@ export default function CadastrosPage() {
                 <tr key={r.userId} style={{ borderTop: '1px solid var(--border)' }}>
                   <td style={{ padding: 10 }}>{r.nome}</td>
                   <td style={{ padding: 10 }}>{r.tipoUsuario}</td>
-                  <td style={{ padding: 10 }}>{r.cpfCnpj}</td>
-                  <td style={{ padding: 10 }}>{r.telefone}</td>
+                  <td style={{ padding: 10 }}>{maskCpfCnpj(r.cpfCnpj || '')}</td>
+                  <td style={{ padding: 10 }}>{maskPhone(r.telefone || '')}</td>
                   <td style={{ padding: 10 }}>{r.email}</td>
                   <td style={{ padding: 10 }}>{r.status}</td>
                   <td style={{ padding: 10 }}>
@@ -359,13 +388,16 @@ export default function CadastrosPage() {
           <label>
             <div style={{ fontSize: 12, opacity: 0.8 }}>Tipo de usuário</div>
             <select className="input" {...form.register('tipo_usuario')}>
-              <option value="Pedreiro">Pedreiro</option>
-              <option value="Ajudante">Ajudante</option>
-              <option value="FornecedorMateriais">Fornecedor Materiais</option>
-              <option value="Engenheiro">Engenheiro</option>
-              <option value="PrestadorServico">Prestador Serviço</option>
-              <option value="Gerente">Gerente</option>
               <option value="Owner">Owner</option>
+              <option value="Proprietario">Proprietário</option>
+              <option value="Gerente">Gerente</option>
+              <option value="Engenheiro">Engenheiro</option>
+              <option value="Arquiteto">Arquiteto</option>
+              <option value="Operacional">Operacional</option>
+              <option value="Ajudante">Ajudante</option>
+              <option value="Fornecedor">Fornecedor</option>
+              <option value="Pedreiro">Pedreiro</option>
+              <option value="Fiscalizacao">Fiscalização</option>
             </select>
           </label>
 
@@ -379,7 +411,15 @@ export default function CadastrosPage() {
 
           <label>
             <div style={{ fontSize: 12, opacity: 0.8 }}>CPF/CNPJ</div>
-            <input className="input" {...form.register('cpf_cnpj')} />
+            <input
+              className="input"
+              {...form.register('cpf_cnpj')}
+              value={maskCpfCnpj(form.watch('cpf_cnpj'))}
+              onChange={(e) => {
+                const masked = maskCpfCnpj(e.target.value);
+                form.setValue('cpf_cnpj', masked, { shouldValidate: true });
+              }}
+            />
             {form.formState.errors.cpf_cnpj && (
               <div style={{ color: 'var(--danger)', fontSize: 12 }}>{form.formState.errors.cpf_cnpj.message}</div>
             )}
@@ -387,7 +427,15 @@ export default function CadastrosPage() {
 
           <label>
             <div style={{ fontSize: 12, opacity: 0.8 }}>Telefone</div>
-            <input className="input" {...form.register('telefone')} />
+            <input
+              className="input"
+              {...form.register('telefone')}
+              value={maskPhone(form.watch('telefone'))}
+              onChange={(e) => {
+                const masked = maskPhone(e.target.value);
+                form.setValue('telefone', masked, { shouldValidate: true });
+              }}
+            />
             {form.formState.errors.telefone && (
               <div style={{ color: 'var(--danger)', fontSize: 12 }}>{form.formState.errors.telefone.message}</div>
             )}

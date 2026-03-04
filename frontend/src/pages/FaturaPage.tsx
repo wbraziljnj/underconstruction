@@ -103,7 +103,7 @@ function pagamentoColor(value?: string) {
 
 export default function FaturaPage() {
   const { user } = useAuth();
-  const canWrite = ['Owner', 'Engenheiro', 'Gerente'].includes(user?.tipoUsuario || '');
+  const canWrite = ['Owner', 'Proprietario', 'Gerente', 'Engenheiro', 'Arquiteto'].includes(user?.tipoUsuario || '');
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<'create' | 'edit'>('create');
   const [editingRow, setEditingRow] = useState<any | null>(null);
@@ -120,6 +120,12 @@ export default function FaturaPage() {
   const [q, setQ] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [faseFilter, setFaseFilter] = useState('');
+
+  const sortedFases = useMemo(
+    () =>
+      [...fases].sort((a, b) => a.fase.localeCompare(b.fase, 'pt-BR', { sensitivity: 'base' })),
+    [fases]
+  );
 
   const defaults = useMemo<FormValues>(
     () => ({
@@ -172,7 +178,6 @@ export default function FaturaPage() {
   }, [user?.activeCode]);
 
   useEffect(() => {
-    if (!open) return;
     let alive = true;
     (async () => {
       try {
@@ -192,7 +197,7 @@ export default function FaturaPage() {
     return () => {
       alive = false;
     };
-  }, [open, user?.activeCode]);
+  }, [user?.activeCode]);
 
   return (
     <div className="card" style={{ padding: 12 }}>
@@ -227,12 +232,12 @@ export default function FaturaPage() {
         <select className="input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="">Status (todos)</option>
           <option value="aberto">Aberto</option>
-          <option value="pendente">Pendente</option>
           <option value="pago">Pago</option>
+          <option value="pendente">Pendente</option>
         </select>
         <select className="input" value={faseFilter} onChange={(e) => setFaseFilter(e.target.value)}>
           <option value="">Fase (todas)</option>
-          {fases.map((f) => (
+          {sortedFases.map((f) => (
             <option key={f.faseId} value={f.faseId}>
               {f.fase}
             </option>
@@ -423,8 +428,8 @@ export default function FaturaPage() {
               }}
             >
               <option value="aberto">Aberto</option>
-              <option value="pendente">Pendente</option>
               <option value="pago">Pago</option>
+              <option value="pendente">Pendente</option>
             </select>
           </label>
 
@@ -459,7 +464,7 @@ export default function FaturaPage() {
             <div style={{ fontSize: 12, opacity: 0.8 }}>Fase</div>
             <select className="input" {...form.register('fase_id')} defaultValue="">
               <option value="">Selecione...</option>
-              {fases.map((f) => (
+              {sortedFases.map((f) => (
                 <option key={f.faseId} value={f.faseId}>
                   {f.fase}
                 </option>

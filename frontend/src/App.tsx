@@ -7,6 +7,7 @@ import ObraPage from './pages/ObraPage';
 import CadastrosPage from './pages/CadastrosPage';
 import FasesPage from './pages/FasesPage';
 import FaturaPage from './pages/FaturaPage';
+import DocumentacoesPage from './pages/DocumentacoesPage';
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -26,6 +27,7 @@ export default function App() {
         <Route path="/cadastros" element={<CadastrosPage />} />
         <Route path="/fases" element={<FasesPage />} />
         <Route path="/fatura" element={<FaturaPage />} />
+        <Route path="/documentacoes" element={<DocumentacoesPage />} />
       </Route>
       <Route path="*" element={<div style={{ padding: 16 }}>404</div>} />
     </Routes>

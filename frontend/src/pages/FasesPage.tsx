@@ -6,18 +6,184 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { apiFetch } from '../api/client';
 import { useAuth } from '../auth/auth';
 
-const schema = z
-  .object({
-    fase: z.string().min(1, 'Fase obrigatória'),
-    status: z.enum(['ABERTO', 'ANDAMENTO', 'PENDENTE', 'FINALIZADO']),
-    data_inicio: z.string().min(1, 'Data início obrigatória'),
-    previsao_finalizacao: z.string().min(1, 'Previsão obrigatória'),
-    data_finalizacao: z.string().optional(),
-    responsavel_id: z.string().optional(),
-    valor_previsao: z.coerce.number().nonnegative('Valor previsão inválido'),
-    notas: z.string().optional()
-  })
-  ;
+const PHASES: { fase: string; subfases: string[] }[] = [
+  {
+    fase: '01 - Estudo e Planejamento',
+    subfases: [
+      '01.01 - Levantamento do terreno',
+      '01.02 - Levantamento topográfico',
+      '01.03 - Sondagem do solo (SPT)',
+      '01.04 - Estudo de viabilidade da obra',
+      '01.05 - Definição do programa da obra',
+      '01.06 - Estimativa inicial de custo'
+    ]
+  },
+  {
+    fase: '02 - Projetos Técnicos',
+    subfases: [
+      '02.01 - Projeto arquitetônico',
+      '02.02 - Projeto estrutural',
+      '02.03 - Projeto elétrico',
+      '02.04 - Projeto hidráulico',
+      '02.05 - Projeto sanitário',
+      '02.06 - Projeto de águas pluviais',
+      '02.07 - Projeto de fundação',
+      '02.08 - Projeto de cobertura',
+      '02.09 - Compatibilização de projetos'
+    ]
+  },
+  {
+    fase: '03 - Aprovações e Documentação',
+    subfases: [
+      '03.01 - Aprovação do projeto na prefeitura',
+      '03.02 - Emissão do alvará de construção',
+      '03.03 - Registro da ART no CREA',
+      '03.04 - Cadastro da obra no CNO/INSS',
+      '03.05 - Elaboração do PGRCC'
+    ]
+  },
+  {
+    fase: '04 - Preparação da Obra',
+    subfases: [
+      '04.01 - Limpeza do terreno',
+      '04.02 - Terraplanagem',
+      '04.03 - Marcação da obra (gabarito)',
+      '04.04 - Instalação do canteiro de obras',
+      '04.05 - Ligação provisória de água',
+      '04.06 - Ligação provisória de energia'
+    ]
+  },
+  {
+    fase: '05 - Fundação',
+    subfases: [
+      '05.01 - Escavação das fundações',
+      '05.02 - Execução de estacas ou brocas',
+      '05.03 - Execução de sapatas ou blocos',
+      '05.04 - Execução de vigas baldrame',
+      '05.05 - Impermeabilização da fundação',
+      '05.06 - Aterro e compactação'
+    ]
+  },
+  {
+    fase: '06 - Estrutura',
+    subfases: [
+      '06.01 - Execução de pilares',
+      '06.02 - Execução de vigas estruturais',
+      '06.03 - Execução de lajes',
+      '06.04 - Execução de escadas',
+      '06.05 - Cura do concreto'
+    ]
+  },
+  {
+    fase: '07 - Alvenaria',
+    subfases: [
+      '07.01 - Levantamento de paredes externas',
+      '07.02 - Levantamento de paredes internas',
+      '07.03 - Execução de vergas',
+      '07.04 - Execução de contravergas',
+      '07.05 - Amarrações estruturais'
+    ]
+  },
+  {
+    fase: '08 - Cobertura',
+    subfases: [
+      '08.01 - Estrutura do telhado',
+      '08.02 - Instalação de caibros e ripas',
+      '08.03 - Instalação das telhas',
+      '08.04 - Instalação de cumeeiras',
+      '08.05 - Instalação de calhas',
+      '08.06 - Instalação de rufos'
+    ]
+  },
+  {
+    fase: '09 - Instalações',
+    subfases: [
+      '09.01 - Infraestrutura elétrica',
+      '09.02 - Infraestrutura hidráulica',
+      '09.03 - Instalação de rede de esgoto',
+      '09.04 - Instalação de rede de água fria',
+      '09.05 - Instalação de água quente',
+      '09.06 - Sistema de drenagem'
+    ]
+  },
+  {
+    fase: '10 - Fechamentos',
+    subfases: [
+      '10.01 - Instalação de portas',
+      '10.02 - Instalação de janelas',
+      '10.03 - Instalação de portões'
+    ]
+  },
+  {
+    fase: '11 - Revestimentos',
+    subfases: [
+      '11.01 - Execução de chapisco',
+      '11.02 - Execução de emboço',
+      '11.03 - Execução de reboco',
+      '11.04 - Instalação de gesso ou drywall',
+      '11.05 - Regularização de pisos'
+    ]
+  },
+  {
+    fase: '12 - Acabamentos',
+    subfases: [
+      '12.01 - Instalação de pisos',
+      '12.02 - Instalação de revestimentos cerâmicos',
+      '12.03 - Pintura interna',
+      '12.04 - Pintura externa',
+      '12.05 - Instalação de rodapés',
+      '12.06 - Instalação de forros'
+    ]
+  },
+  {
+    fase: '13 - Instalações Finais',
+    subfases: [
+      '13.01 - Instalação de tomadas',
+      '13.02 - Instalação de interruptores',
+      '13.03 - Instalação de luminárias',
+      '13.04 - Instalação de louças sanitárias',
+      '13.05 - Instalação de metais (torneiras e registros)',
+      '13.06 - Instalação de chuveiros'
+    ]
+  },
+  {
+    fase: '14 - Área Externa',
+    subfases: [
+      '14.01 - Execução de calçadas',
+      '14.02 - Execução de garagem',
+      '14.03 - Construção de muros',
+      '14.04 - Instalação de portão',
+      '14.05 - Paisagismo'
+    ]
+  },
+  {
+    fase: '15 - Finalização',
+    subfases: [
+      '15.01 - Limpeza final da obra',
+      '15.02 - Testes das instalações',
+      '15.03 - Vistoria final',
+      '15.04 - Emissão do habite-se',
+      '15.05 - Entrega da obra'
+    ]
+  }
+];
+
+function getSubfasesByFase(fase: string): string[] {
+  const entry = PHASES.find((p) => p.fase === fase);
+  return entry ? entry.subfases : [];
+}
+
+const schema = z.object({
+  fase: z.string().min(1, 'Fase obrigatória'),
+  subfase: z.string().min(1, 'Subfase obrigatória'),
+  status: z.enum(['ABERTO', 'ANDAMENTO', 'PENDENTE', 'FINALIZADO']),
+  data_inicio: z.string().min(1, 'Data início obrigatória'),
+  previsao_finalizacao: z.string().min(1, 'Previsão obrigatória'),
+  data_finalizacao: z.string().optional(),
+  responsavel_id: z.string().optional(),
+  valor_previsao: z.coerce.number().nonnegative('Valor previsão inválido'),
+  notas: z.string().optional()
+});
 
 type FormValues = z.infer<typeof schema>;
 
@@ -69,7 +235,7 @@ function PencilIcon({ title = 'Editar' }: { title?: string }) {
 
 export default function FasesPage() {
   const { user } = useAuth();
-  const canWrite = ['Owner', 'Engenheiro', 'Gerente'].includes(user?.tipoUsuario || '');
+  const canWrite = ['Owner', 'Proprietario', 'Gerente', 'Engenheiro', 'Arquiteto'].includes(user?.tipoUsuario || '');
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<'create' | 'edit'>('create');
   const [editingRow, setEditingRow] = useState<any | null>(null);
@@ -84,10 +250,12 @@ export default function FasesPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [subfasesOptions, setSubfasesOptions] = useState<string[]>(getSubfasesByFase(PHASES[0]?.fase ?? ''));
 
   const defaults = useMemo<FormValues>(
     () => ({
-      fase: '',
+      fase: PHASES[0]?.fase ?? '',
+      subfase: PHASES[0]?.subfases?.[0] ?? '',
       status: 'ABERTO',
       data_inicio: '',
       previsao_finalizacao: '',
@@ -103,6 +271,8 @@ export default function FasesPage() {
     resolver: zodResolver(schema),
     defaultValues: defaults
   });
+
+  const selectedFase = form.watch('fase');
 
   async function load() {
     setLoading(true);
@@ -124,6 +294,18 @@ export default function FasesPage() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.activeCode]);
+
+  useEffect(() => {
+    const subs = selectedFase ? getSubfasesByFase(selectedFase) : [];
+    setSubfasesOptions(subs);
+    if (subs.length && !subs.includes(form.watch('subfase'))) {
+      form.setValue('subfase', subs[0] ?? '', { shouldValidate: true });
+    }
+    if (!subs.length) {
+      form.setValue('subfase', '', { shouldValidate: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFase]);
 
   useEffect(() => {
     if (!open) return;
@@ -158,6 +340,7 @@ export default function FasesPage() {
             setMode('create');
             setEditingRow(null);
             form.reset(defaults);
+            setSubfasesOptions(getSubfasesByFase(defaults.fase));
             setOpen(true);
           }}
         >
@@ -177,8 +360,8 @@ export default function FasesPage() {
           <option value="">Status (todos)</option>
           <option value="ABERTO">Aberto</option>
           <option value="ANDAMENTO">Andamento</option>
-          <option value="PENDENTE">Pendente</option>
           <option value="FINALIZADO">Finalizado</option>
+          <option value="PENDENTE">Pendente</option>
         </select>
         <button className="btn" onClick={() => load()} disabled={loading}>
           Filtrar
@@ -190,6 +373,7 @@ export default function FasesPage() {
           <thead>
             <tr style={{ textAlign: 'left', opacity: 0.8 }}>
               <th style={{ padding: 10 }}>Fase</th>
+              <th style={{ padding: 10 }}>Subfase</th>
               <th style={{ padding: 10 }}>Início</th>
               <th style={{ padding: 10 }}>Previsão</th>
               <th style={{ padding: 10 }}>Finalização</th>
@@ -202,19 +386,19 @@ export default function FasesPage() {
           <tbody>
             {listError ? (
               <tr>
-                <td colSpan={8} style={{ padding: 12, color: 'var(--danger)' }}>
+                <td colSpan={9} style={{ padding: 12, color: 'var(--danger)' }}>
                   {listError}
                 </td>
               </tr>
             ) : loading ? (
               <tr>
-                <td colSpan={8} style={{ padding: 12, opacity: 0.7 }}>
+                <td colSpan={9} style={{ padding: 12, opacity: 0.7 }}>
                   Carregando...
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ padding: 12, opacity: 0.7 }}>
+                <td colSpan={9} style={{ padding: 12, opacity: 0.7 }}>
                   Nenhuma fase encontrada.
                 </td>
               </tr>
@@ -222,6 +406,7 @@ export default function FasesPage() {
               rows.map((r) => (
                 <tr key={r.faseId} style={{ borderTop: '1px solid var(--border)' }}>
                   <td style={{ padding: 10 }}>{r.fase}</td>
+                  <td style={{ padding: 10, opacity: 0.8 }}>{r.subfase || '-'}</td>
                   <td style={{ padding: 10 }}>{formatBrDate(r.dataInicio)}</td>
                   <td style={{ padding: 10 }}>{formatBrDate(r.previsaoFinalizacao)}</td>
                   <td style={{ padding: 10 }}>{r.dataFinalizacao ? formatBrDate(r.dataFinalizacao) : '-'}</td>
@@ -237,8 +422,11 @@ export default function FasesPage() {
                       onClick={() => {
                         setMode('edit');
                         setEditingRow(r);
+                        const subs = getSubfasesByFase(r.fase || '');
+                        setSubfasesOptions(subs);
                         form.reset({
                           fase: r.fase || '',
+                          subfase: r.subfase || subs[0] || '',
                           status: r.status || 'ABERTO',
                           data_inicio: toDateOnlyLocal(r.dataInicio),
                           previsao_finalizacao: toDateOnlyLocal(r.previsaoFinalizacao),
@@ -320,9 +508,45 @@ export default function FasesPage() {
         >
           <label style={{ gridColumn: '1 / -1' }}>
             <div style={{ fontSize: 12, opacity: 0.8 }}>Fase</div>
-            <input className="input" {...form.register('fase')} />
+            <select
+              className="input"
+              {...form.register('fase')}
+              onChange={(e) => {
+                const value = e.target.value;
+                form.setValue('fase', value, { shouldValidate: true });
+                const subs = getSubfasesByFase(value);
+                setSubfasesOptions(subs);
+                form.setValue('subfase', subs[0] ?? '', { shouldValidate: true });
+              }}
+            >
+              <option value="">Selecione...</option>
+              {PHASES.map((p) => (
+                <option key={p.fase} value={p.fase}>
+                  {p.fase}
+                </option>
+              ))}
+            </select>
             {form.formState.errors.fase && (
               <div style={{ color: 'var(--danger)', fontSize: 12 }}>{form.formState.errors.fase.message}</div>
+            )}
+          </label>
+
+          <label style={{ gridColumn: '1 / -1' }}>
+            <div style={{ fontSize: 12, opacity: 0.8 }}>Subfase</div>
+            <select
+              className="input"
+              {...form.register('subfase')}
+              onChange={(e) => form.setValue('subfase', e.target.value, { shouldValidate: true })}
+            >
+              <option value="">Selecione...</option>
+              {subfasesOptions.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+            {form.formState.errors.subfase && (
+              <div style={{ color: 'var(--danger)', fontSize: 12 }}>{form.formState.errors.subfase.message}</div>
             )}
           </label>
 
@@ -331,8 +555,8 @@ export default function FasesPage() {
             <select className="input" {...form.register('status')}>
               <option value="ABERTO">Aberto</option>
               <option value="ANDAMENTO">Andamento</option>
-              <option value="PENDENTE">Pendente</option>
               <option value="FINALIZADO">Finalizado</option>
+              <option value="PENDENTE">Pendente</option>
             </select>
           </label>
 
