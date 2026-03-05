@@ -277,6 +277,25 @@ export default function FasesPage() {
 
   const selectedFase = form.watch('fase');
 
+  function openEditModal(row: any) {
+    setMode('edit');
+    setEditingRow(row);
+    const subs = getSubfasesByFase(row?.fase || '');
+    setSubfasesOptions(subs);
+    form.reset({
+      fase: row?.fase || '',
+      subfase: row?.subfase || subs[0] || '',
+      status: row?.status || 'ABERTO',
+      data_inicio: toDateOnlyLocal(row?.dataInicio),
+      previsao_finalizacao: toDateOnlyLocal(row?.previsaoFinalizacao),
+      data_finalizacao: toDateOnlyLocal(row?.dataFinalizacao),
+      responsavel_id: row?.responsavelId ? String(row.responsavelId) : '',
+      valor_previsao: Number(row?.valorPrevisao || 0),
+      notas: row?.notas || ''
+    });
+    setOpen(true);
+  }
+
   async function load() {
     setLoading(true);
     setListError(null);
@@ -431,22 +450,7 @@ export default function FasesPage() {
                       disabled={!canWrite}
                       onClick={(e) => {
                         e.stopPropagation();
-                        setMode('edit');
-                        setEditingRow(r);
-                        const subs = getSubfasesByFase(r.fase || '');
-                        setSubfasesOptions(subs);
-                        form.reset({
-                          fase: r.fase || '',
-                          subfase: r.subfase || subs[0] || '',
-                          status: r.status || 'ABERTO',
-                          data_inicio: toDateOnlyLocal(r.dataInicio),
-                          previsao_finalizacao: toDateOnlyLocal(r.previsaoFinalizacao),
-                          data_finalizacao: toDateOnlyLocal(r.dataFinalizacao),
-                          responsavel_id: r.responsavelId ? String(r.responsavelId) : '',
-                          valor_previsao: Number(r.valorPrevisao || 0),
-                          notas: r.notas || ''
-                        });
-                        setOpen(true);
+                        openEditModal(r);
                       }}
                       style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                     >
@@ -521,6 +525,22 @@ export default function FasesPage() {
                   <div className="uc-fase-field">
                     <b>updated_at:</b> <span>{detailsRow.updatedAt || '—'}</span>
                   </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: 6 }}>
+                  <button
+                    className="btn"
+                    type="button"
+                    disabled={!canWrite}
+                    onClick={() => {
+                      setDetailsOpen(false);
+                      openEditModal(detailsRow);
+                    }}
+                    title="Editar fase"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                  >
+                    <PencilIcon /> Editar
+                  </button>
                 </div>
               </div>
             </div>
