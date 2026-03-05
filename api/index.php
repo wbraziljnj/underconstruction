@@ -1248,10 +1248,10 @@ if ($relativePath === '/documentacoes' && $method === 'GET') {
                    d.status, d.pagamento_status, d.tipo_assinatura, d.assinatura, d.responsavel_id, d.notas, d.arquivo_path, d.created_at, d.updated_at,
                    u.nome AS responsavel_nome, ua.nome AS assinatura_nome
             FROM uc_documentacoes d
-            LEFT JOIN uc_users u ON u.user_id = d.responsavel_id AND ' . uc_users_code_predicate('u.code') . '
-            LEFT JOIN uc_users ua ON ua.user_id = d.assinatura AND ' . uc_users_code_predicate('ua.code') . '
+            LEFT JOIN uc_users u ON u.user_id = d.responsavel_id
+            LEFT JOIN uc_users ua ON ua.user_id = d.assinatura
             WHERE ' . uc_code_predicate_for_table('uc_documentacoes', 'd.code');
-    $params = [$code, $code, $code];
+    $params = [$code];
 
     if ($q !== '') {
         $sql .= ' AND (LOWER(d.documento) LIKE ? OR LOWER(d.fase) LIKE ? OR LOWER(d.subfase) LIKE ? OR LOWER(u.nome) LIKE ?)';
