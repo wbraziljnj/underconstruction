@@ -49,6 +49,23 @@ function onlyDigits(value: string) {
   return String(value || '').replace(/\D/g, '');
 }
 
+function PhoneIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2A19.8 19.8 0 0 1 3 5.18 2 2 0 0 1 5.11 3h3a2 2 0 0 1 2 1.72c.12.86.32 1.7.59 2.5a2 2 0 0 1-.45 2.11L9.1 10.9a16 16 0 0 0 4 4l1.57-1.15a2 2 0 0 1 2.11-.45c.8.27 1.64.47 2.5.59A2 2 0 0 1 22 16.92z" />
+    </svg>
+  );
+}
+
+function WhatsAppIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 11.5a8.5 8.5 0 0 1-12.7 7.4L3 20l1.2-5.1A8.5 8.5 0 1 1 21 11.5z" />
+      <path d="M8.6 9.3c.2-.4.4-.4.6-.4h.5c.2 0 .4.1.5.4l.7 1.6c.1.2.1.4 0 .6l-.4.6c-.1.2-.1.4 0 .6.5.9 1.5 1.8 2.5 2.3.2.1.4.1.6 0l.7-.4c.2-.1.4-.1.6 0l1.6.7c.3.1.4.3.4.5v.5c0 .2 0 .4-.4.6-.7.4-1.6.5-2.3.3-2.4-.6-5.5-3.6-6.1-6.1-.2-.8-.1-1.6.3-2.3z" />
+    </svg>
+  );
+}
+
 const schema = z.object({
   id_principal: z.string().optional(),
   foto: z.string().optional(),
@@ -288,6 +305,8 @@ export default function CadastrosPage() {
         .uc-user-links{ display:grid; gap:4px; }
         .uc-user-links a{ text-decoration: none; }
         .uc-user-links a:hover{ text-decoration: underline; }
+        .uc-user-link{ display:inline-flex; align-items:center; gap:8px; }
+        .uc-user-link svg{ opacity:0.9; }
         .uc-user-meta{ display:flex; justify-content:space-between; gap:10px; font-size:12px; opacity:0.75; }
       `}</style>
 
@@ -327,10 +346,14 @@ export default function CadastrosPage() {
                         return (
                           <>
                             <a href={`tel:+${brE164}`} title="Ligar">
-                              Telefone: {display}
+                              <span className="uc-user-link">
+                                <PhoneIcon /> {display}
+                              </span>
                             </a>
                             <a href={`https://wa.me/${brE164}`} target="_blank" rel="noreferrer" title="Abrir WhatsApp">
-                              WhatsApp: {display}
+                              <span className="uc-user-link">
+                                <WhatsAppIcon /> {display}
+                              </span>
                             </a>
                           </>
                         );
