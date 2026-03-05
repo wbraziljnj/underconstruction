@@ -1695,7 +1695,12 @@ if ($relativePath === '/faturas' && $method === 'GET') {
         $params[] = (int)$faseId;
     }
 
-    $sql .= ' ORDER BY ft.data DESC, ft.lancamento DESC';
+    $sql .= ' ORDER BY
+                CAST(SUBSTRING_INDEX(COALESCE(f.fase, ""), " ", 1) AS UNSIGNED) DESC,
+                CAST(SUBSTRING_INDEX(COALESCE(ft.subfase, ""), ".", 1) AS UNSIGNED) DESC,
+                CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(COALESCE(ft.subfase, ""), ".", -1), " ", 1) AS UNSIGNED) DESC,
+                ft.data DESC,
+                ft.lancamento DESC';
     $rows = fetch_all($sql, $params);
     $items = array_map(fn ($r) => [
         'faturaId' => (string)$r['fatura_id'],
