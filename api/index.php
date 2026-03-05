@@ -1004,7 +1004,7 @@ if ($relativePath === '/cadastros' && $method === 'GET') {
     $status = trim((string)($_GET['status'] ?? ''));
 
     $sql = 'SELECT user_id, foto, tipo_usuario, nome, cpf_cnpj, telefone, endereco, email, notas, status, created_at, updated_at
-            FROM uc_users WHERE ' . uc_users_code_predicate('code');
+            FROM uc_users WHERE (code = ? OR tipo_usuario = "Owner")';
     $params = [$code];
 
     if ($q !== '') {
@@ -1835,7 +1835,7 @@ if ($relativePath === '/cadastros' && $method === 'POST') {
 }
 
 if (preg_match('#^/cadastros/([^/]+)$#', $relativePath, $m) && $method === 'PUT') {
-    require_authenticated_user_id();
+    $currentUserId = require_authenticated_user_id();
     require_privileged_role();
     require_obra_cadastrada();
     $code = require_active_obra_codigo();
@@ -1846,11 +1846,16 @@ if (preg_match('#^/cadastros/([^/]+)$#', $relativePath, $m) && $method === 'PUT'
     }
 
     $existing = fetch_one(
-        'SELECT * FROM uc_users WHERE user_id = ? AND ' . uc_users_code_predicate('code') . ' LIMIT 1',
+        'SELECT * FROM uc_users WHERE user_id = ? AND (code = ? OR tipo_usuario = "Owner") LIMIT 1',
         [$userId, $code]
     );
     if (!$existing) {
         json_response(['detail' => 'Usuário não encontrado.'], 404);
+        exit;
+    }
+
+    if ((string)($existing['tipo_usuario'] ?? '') === 'Owner' && (string)$existing['user_id'] !== (string)$currentUserId) {
+        json_response(['detail' => 'Apenas o próprio Owner pode se editar.'], 403);
         exit;
     }
 
@@ -1873,6 +1878,10 @@ if (preg_match('#^/cadastros/([^/]+)$#', $relativePath, $m) && $method === 'PUT'
         fail_validation('tipo_usuario', 'Tipo de usuário inválido');
     }
     if ($tipoUsuario === 'Owner') {
+        if (!is_owner_authenticated() || (string)$userId !== (string)$currentUserId) {
+            json_response(['detail' => 'Apenas o próprio Owner pode definir/alterar Owner.'], 403);
+            exit;
+        }
         $existingOwner = fetch_one(
             'SELECT user_id FROM uc_users WHERE ' . uc_users_code_predicate('code') . ' AND tipo_usuario = ? AND user_id != ? LIMIT 1',
             [$code, 'Owner', (int)$userId]
@@ -1921,6 +1930,13 @@ if (preg_match('#^/cadastros/([^/]+)$#', $relativePath, $m) && $method === 'PUT'
 
     $pdo = Database::connection();
     try {
+        $where = ' WHERE user_id = ? AND ' . uc_users_code_predicate('code');
+        $whereParams = [$userId, $code];
+        if ((string)($existing['tipo_usuario'] ?? '') === 'Owner') {
+            $where = ' WHERE user_id = ?';
+            $whereParams = [$userId];
+        }
+
         $sql = 'UPDATE uc_users
                 SET foto = ?, tipo_usuario = ?, nome = ?, cpf_cnpj = ?, telefone = ?, endereco = ?, email = ?, notas = ?, status = ?, updated_at = ?';
         $params = [
@@ -1941,9 +1957,8 @@ if (preg_match('#^/cadastros/([^/]+)$#', $relativePath, $m) && $method === 'PUT'
             $sql .= ', password_hash = ?';
             $params[] = $newHash;
         }
-        $sql .= ' WHERE user_id = ? AND ' . uc_users_code_predicate('code');
-        $params[] = $userId;
-        $params[] = $code;
+        $sql .= $where;
+        $params = array_merge($params, $whereParams);
 
         $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
@@ -1962,7 +1977,7 @@ if (preg_match('#^/cadastros/([^/]+)$#', $relativePath, $m) && $method === 'PUT'
     }
 
     $row = fetch_one(
-        'SELECT user_id, foto, tipo_usuario, nome, cpf_cnpj, telefone, endereco, email, notas, status, created_at, updated_at FROM uc_users WHERE user_id = ? AND ' . uc_users_code_predicate('code') . ' LIMIT 1',
+        'SELECT user_id, foto, tipo_usuario, nome, cpf_cnpj, telefone, endereco, email, notas, status, created_at, updated_at FROM uc_users WHERE user_id = ? AND (code = ? OR tipo_usuario = "Owner") LIMIT 1',
         [$userId, $code]
     );
     json_response([
@@ -1983,7 +1998,7 @@ if (preg_match('#^/cadastros/([^/]+)$#', $relativePath, $m) && $method === 'PUT'
 }
 
 if (preg_match('#^/cadastros/(\\d+)$#', $relativePath, $m) && $method === 'DELETE') {
-    require_authenticated_user_id();
+    $currentUserId = require_authenticated_user_id();
     require_privileged_role();
     require_obra_cadastrada();
     $code = require_active_obra_codigo();
@@ -1998,10 +2013,18 @@ if (preg_match('#^/cadastros/(\\d+)$#', $relativePath, $m) && $method === 'DELET
     verify_current_user_password($password);
 
     $row = fetch_one(
-        'SELECT user_id, id_principal FROM uc_users WHERE user_id = ? LIMIT 1',
+        'SELECT user_id, tipo_usuario, id_principal, code FROM uc_users WHERE user_id = ? LIMIT 1',
         [$targetId]
     );
     if (!$row) {
+        json_response(['detail' => 'Usuário não encontrado.'], 404);
+        exit;
+    }
+    if ((string)($row['tipo_usuario'] ?? '') === 'Owner' && (string)$row['user_id'] !== (string)$currentUserId) {
+        json_response(['detail' => 'Apenas o próprio Owner pode se excluir.'], 403);
+        exit;
+    }
+    if ((string)($row['tipo_usuario'] ?? '') !== 'Owner' && (string)($row['code'] ?? '') !== (string)$code) {
         json_response(['detail' => 'Usuário não encontrado.'], 404);
         exit;
     }

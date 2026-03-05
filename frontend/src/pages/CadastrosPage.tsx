@@ -293,7 +293,10 @@ export default function CadastrosPage() {
                       className="btn"
                       type="button"
                       title="Editar"
-                      disabled={!canWrite}
+                      disabled={
+                        !canWrite ||
+                        (String(r.tipoUsuario || '') === 'Owner' && String(user?.userId || '') !== String(r.userId || ''))
+                      }
                       onClick={() => {
                         setMode('edit');
                         setEditingRow(r);
