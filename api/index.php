@@ -1664,7 +1664,7 @@ if ($relativePath === '/faturas' && $method === 'GET') {
     $status = trim((string)($_GET['status'] ?? ''));
     $faseId = trim((string)($_GET['fase_id'] ?? ''));
 
-    $sql = 'SELECT ft.fatura_id, ft.data, ft.lancamento, ft.data_pagamento, ft.dados_pagamento, ft.nfe, ft.notas, ft.status, ft.pagamento,
+    $sql = 'SELECT ft.fatura_id, ft.data, ft.lancamento, ft.data_pagamento, ft.dados_pagamento, ft.nfe, ft.comprovante, ft.notas, ft.status, ft.pagamento,
                    ft.valor, ft.quantidade, ft.descricao, ft.total, ft.fase_id, ft.responsavel_id, ft.empresa_id,
                    ft.subfase,
                    ft.created_at, ft.updated_at,
@@ -1716,6 +1716,8 @@ if ($relativePath === '/faturas' && $method === 'GET') {
         'dataPagamento' => $r['data_pagamento'] !== null ? (string)$r['data_pagamento'] : null,
         'dadosPagamento' => $r['dados_pagamento'] !== null ? (string)$r['dados_pagamento'] : null,
         'nfe' => $r['nfe'] !== null ? (string)$r['nfe'] : null,
+        'comprovantePath' => $r['comprovante'] !== null ? (string)$r['comprovante'] : null,
+        'comprovanteUrl' => $r['comprovante'] !== null ? uc_public_api_url_for_path((string)$r['comprovante']) : null,
         'notas' => $r['notas'] !== null ? (string)$r['notas'] : '',
         'status' => (string)$r['status'],
         'pagamento' => (string)$r['pagamento'],
@@ -2385,12 +2387,13 @@ if ($relativePath === '/faturas' && $method === 'POST') {
     }
     $dadosPagamento = optional_string($payload['dados_pagamento'] ?? ($payload['dadosPagamento'] ?? null));
     $nfe = optional_string($payload['nfe'] ?? null);
+    $comprovantePath = optional_string($payload['comprovante'] ?? ($payload['comprovantePath'] ?? null));
     $notas = optional_string($payload['notas'] ?? null) ?? '';
     $dadosPagamentoStr = $dadosPagamento ?? '';
     $nfeStr = $nfe ?? '';
 
     $pdo = Database::connection();
-    $stmt = $pdo->prepare('INSERT INTO uc_faturas (code, descricao, data, lancamento, data_pagamento, dados_pagamento, nfe, notas, status, pagamento, valor, quantidade, total, fase_id, subfase, responsavel_id, empresa_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    $stmt = $pdo->prepare('INSERT INTO uc_faturas (code, descricao, data, lancamento, data_pagamento, dados_pagamento, nfe, comprovante, notas, status, pagamento, valor, quantidade, total, fase_id, subfase, responsavel_id, empresa_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
     $stmt->execute([
         $code,
         $descricao,
@@ -2399,6 +2402,7 @@ if ($relativePath === '/faturas' && $method === 'POST') {
         $dataPagamento,
         $dadosPagamentoStr,
         $nfeStr,
+        $comprovantePath,
         $notas,
         $status,
         $pagamento,
@@ -2415,6 +2419,8 @@ if ($relativePath === '/faturas' && $method === 'POST') {
     json_response([
         'faturaId' => $faturaId,
         'descricao' => $descricao,
+        'comprovantePath' => $comprovantePath,
+        'comprovanteUrl' => $comprovantePath ? uc_public_api_url_for_path($comprovantePath) : null,
         'valor' => $valor,
         'quantidade' => $quantidade,
         'total' => $total,
@@ -2492,18 +2498,23 @@ if (preg_match('#^/faturas/(\\d+)$#', $relativePath, $m) && $method === 'PUT') {
     }
     $dadosPagamento = optional_string($payload['dados_pagamento'] ?? ($payload['dadosPagamento'] ?? null));
     $nfe = optional_string($payload['nfe'] ?? null);
+    $comprovantePath = optional_string($payload['comprovante'] ?? ($payload['comprovantePath'] ?? null));
+    if ($comprovantePath === null || $comprovantePath === '') {
+        $comprovantePath = optional_string($existing['comprovante'] ?? null);
+    }
     $notas = optional_string($payload['notas'] ?? null) ?? '';
     $dadosPagamentoStr = $dadosPagamento ?? '';
     $nfeStr = $nfe ?? '';
 
     $pdo = Database::connection();
-    $stmt = $pdo->prepare('UPDATE uc_faturas SET descricao = ?, data = ?, data_pagamento = ?, dados_pagamento = ?, nfe = ?, notas = ?, status = ?, pagamento = ?, valor = ?, quantidade = ?, total = ?, fase_id = ?, subfase = ?, responsavel_id = ?, empresa_id = ? WHERE fatura_id = ? AND code = ?');
+    $stmt = $pdo->prepare('UPDATE uc_faturas SET descricao = ?, data = ?, data_pagamento = ?, dados_pagamento = ?, nfe = ?, comprovante = ?, notas = ?, status = ?, pagamento = ?, valor = ?, quantidade = ?, total = ?, fase_id = ?, subfase = ?, responsavel_id = ?, empresa_id = ? WHERE fatura_id = ? AND code = ?');
     $stmt->execute([
         $descricao,
         $data,
         $dataPagamento,
         $dadosPagamentoStr,
         $nfeStr,
+        $comprovantePath,
         $notas,
         $status,
         $pagamento,
@@ -2519,7 +2530,7 @@ if (preg_match('#^/faturas/(\\d+)$#', $relativePath, $m) && $method === 'PUT') {
     ]);
 
     $row = fetch_one(
-        'SELECT ft.fatura_id, ft.data, ft.lancamento, ft.data_pagamento, ft.dados_pagamento, ft.nfe, ft.notas, ft.status, ft.pagamento,
+        'SELECT ft.fatura_id, ft.data, ft.lancamento, ft.data_pagamento, ft.dados_pagamento, ft.nfe, ft.comprovante, ft.notas, ft.status, ft.pagamento,
                 ft.valor, ft.quantidade, ft.descricao, ft.total, ft.fase_id, ft.subfase, ft.responsavel_id, ft.empresa_id,
                 ft.created_at, ft.updated_at,
                 f.fase AS fase_nome,
@@ -2540,6 +2551,8 @@ if (preg_match('#^/faturas/(\\d+)$#', $relativePath, $m) && $method === 'PUT') {
         'dataPagamento' => $row['data_pagamento'] !== null ? (string)$row['data_pagamento'] : null,
         'dadosPagamento' => $row['dados_pagamento'] !== null ? (string)$row['dados_pagamento'] : null,
         'nfe' => $row['nfe'] !== null ? (string)$row['nfe'] : null,
+        'comprovantePath' => $row['comprovante'] !== null ? (string)$row['comprovante'] : null,
+        'comprovanteUrl' => $row['comprovante'] !== null ? uc_public_api_url_for_path((string)$row['comprovante']) : null,
         'notas' => $row['notas'] !== null ? (string)$row['notas'] : '',
         'status' => (string)$row['status'],
         'pagamento' => (string)$row['pagamento'],

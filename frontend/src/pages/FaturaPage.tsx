@@ -10,6 +10,7 @@ import { FASES_FIXAS } from '../ui/fasesFixas';
 
 const schema = z
   .object({
+    comprovante: z.string().optional(),
     data: z.string().min(1, 'Data obrigatória'),
     lancamento: z.string().optional(),
     data_pagamento: z.string().optional(),
@@ -38,6 +39,7 @@ const schema = z
   });
 
 type FormValues = z.infer<typeof schema>;
+type UploadResponse = { path?: string; url?: string; filename?: string };
 
 type UserOption = { userId: string; nome: string; tipoUsuario: string; status: string };
 type FaseOption = { faseId: string; fase: string; subfase?: string | null };
@@ -104,6 +106,24 @@ function pagamentoColor(value?: string) {
   return 'inherit';
 }
 
+function apiBaseUrl() {
+  const baseUrl = (import.meta as any).env?.BASE_URL ?? '/';
+  return `${String(baseUrl).replace(/\/?$/, '/')}`;
+}
+
+async function uploadComprovante(file: File): Promise<UploadResponse> {
+  const url = `${apiBaseUrl()}api/upload-documento`;
+  const fd = new FormData();
+  fd.append('arquivo', file);
+  const res = await fetch(url, { method: 'POST', credentials: 'include', body: fd });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    const msg = (data as any)?.detail || (data as any)?.error || 'Falha no upload';
+    throw new Error(msg);
+  }
+  return data as UploadResponse;
+}
+
 export default function FaturaPage() {
   const { user } = useAuth();
   const canWrite = ['Owner', 'Proprietario', 'Gerente', 'Engenheiro', 'Arquiteto'].includes(user?.tipoUsuario || '');
@@ -118,6 +138,7 @@ export default function FaturaPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [selectedComprovanteFile, setSelectedComprovanteFile] = useState<File | null>(null);
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
@@ -141,6 +162,7 @@ export default function FaturaPage() {
 
   const defaults = useMemo<FormValues>(
     () => ({
+      comprovante: '',
       data: '',
       lancamento: new Date().toISOString().slice(0, 10),
       data_pagamento: '',
@@ -227,6 +249,7 @@ export default function FaturaPage() {
             setMode('create');
             setEditingRow(null);
             setFaseNome('');
+            setSelectedComprovanteFile(null);
             form.reset(defaults);
             // recalcula total no front só para UX (backend vai recalcular depois)
             form.setValue('total', (Number(valor) || 0) * (Number(quantidade) || 0), { shouldValidate: true });
@@ -274,25 +297,26 @@ export default function FaturaPage() {
               <th style={{ padding: 10 }}>Valor</th>
               <th style={{ padding: 10 }}>Total</th>
               <th style={{ padding: 10 }}>Pagamento</th>
+              <th style={{ padding: 10 }}>Comprovante</th>
               <th style={{ padding: 10 }}>Ações</th>
             </tr>
           </thead>
           <tbody>
             {listError ? (
               <tr>
-                <td colSpan={8} style={{ padding: 12, color: 'var(--danger)' }}>
+                <td colSpan={9} style={{ padding: 12, color: 'var(--danger)' }}>
                   {listError}
                 </td>
               </tr>
             ) : loading ? (
               <tr>
-                <td colSpan={8} style={{ padding: 12, opacity: 0.7 }}>
+                <td colSpan={9} style={{ padding: 12, opacity: 0.7 }}>
                   Carregando...
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ padding: 12, opacity: 0.7 }}>
+                <td colSpan={9} style={{ padding: 12, opacity: 0.7 }}>
                   Nenhuma fatura encontrada.
                 </td>
               </tr>
@@ -307,6 +331,15 @@ export default function FaturaPage() {
                   <td style={{ padding: 10 }}>{r.total}</td>
                   <td style={{ padding: 10, color: pagamentoColor(r.pagamento), fontWeight: 600 }}>{r.pagamento}</td>
                   <td style={{ padding: 10 }}>
+                    {r.comprovanteUrl ? (
+                      <a href={r.comprovanteUrl} target="_blank" rel="noreferrer">
+                        Abrir
+                      </a>
+                    ) : (
+                      '-'
+                    )}
+                  </td>
+                  <td style={{ padding: 10 }}>
                     <button
                       className="btn"
                       type="button"
@@ -316,7 +349,9 @@ export default function FaturaPage() {
                         setMode('edit');
                         setEditingRow(r);
                         setFaseNome(String(r.faseNome || ''));
+                        setSelectedComprovanteFile(null);
                         form.reset({
+                          comprovante: r.comprovantePath || '',
                           descricao: r.fatura || '',
                           data: toDateOnlyLocal(r.data),
                           lancamento: toDateOnlyLocal(r.lancamento) || toDateOnlyLocal(new Date().toISOString()),
@@ -376,7 +411,25 @@ export default function FaturaPage() {
               onClick={form.handleSubmit(async (values) => {
                 // UX: recalcula total antes de enviar; backend vai recalcular também.
                 const totalCalc = (Number(values.valor) || 0) * (Number(values.quantidade) || 0);
-                const payload = { ...values, total: totalCalc };
+                let comprovantePath = values.comprovante || editingRow?.comprovantePath || '';
+                if (selectedComprovanteFile) {
+                  const uploaded = await uploadComprovante(selectedComprovanteFile);
+                  if (uploaded.path) {
+                    comprovantePath = uploaded.path;
+                  } else if (uploaded.url) {
+                    const u = String(uploaded.url);
+                    const m = u.match(/\/api\/(uploads\/.+)$/);
+                    if (m?.[1]) {
+                      comprovantePath = m[1];
+                    } else {
+                      comprovantePath = u.replace(/^\/+/, '');
+                    }
+                  } else if (uploaded.filename) {
+                    comprovantePath = `uploads/${uploaded.filename}`;
+                  }
+                }
+
+                const payload = { ...values, comprovante: comprovantePath || undefined, total: totalCalc };
 
                 // Regra: se pagamento != pago, limpar data_pagamento
                 if (payload.pagamento !== 'pago') payload.data_pagamento = '';
@@ -412,6 +465,37 @@ export default function FaturaPage() {
           onSubmit={(e) => e.preventDefault()}
           style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}
         >
+          <div style={{ gridColumn: '1 / -1' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 12, opacity: 0.8 }}>Comprovante</div>
+                <div style={{ fontSize: 12, opacity: 0.7 }}>
+                  {selectedComprovanteFile ? selectedComprovanteFile.name : editingRow?.comprovanteUrl ? 'Arquivo já enviado' : 'Nenhum arquivo selecionado'}
+                </div>
+                {mode === 'edit' && editingRow?.comprovanteUrl ? (
+                  <div style={{ fontSize: 12, marginTop: 4 }}>
+                    <a href={editingRow.comprovanteUrl} target="_blank" rel="noreferrer">
+                      Abrir comprovante
+                    </a>
+                  </div>
+                ) : null}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <label className="btn" style={{ cursor: 'pointer' }}>
+                  Selecionar
+                  <input
+                    type="file"
+                    style={{ display: 'none' }}
+                    onChange={(e) => setSelectedComprovanteFile(e.target.files?.[0] ?? null)}
+                  />
+                </label>
+                <button className="btn" type="button" onClick={() => setSelectedComprovanteFile(null)} disabled={!selectedComprovanteFile}>
+                  Remover
+                </button>
+              </div>
+            </div>
+          </div>
+
           <label style={{ gridColumn: '1 / -1' }}>
             <div style={{ fontSize: 12, opacity: 0.8 }}>Fatura</div>
             <input className="input" {...form.register('descricao')} placeholder="Nome da fatura" />
