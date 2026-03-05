@@ -1076,11 +1076,11 @@ if ($relativePath === '/fases' && $method === 'GET') {
     }
 
     $sql .= ' ORDER BY
-                CAST(SUBSTRING_INDEX(f.fase, " ", 1) AS UNSIGNED) ASC,
-                CAST(SUBSTRING_INDEX(COALESCE(f.subfase, ""), ".", 1) AS UNSIGNED) ASC,
-                CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(COALESCE(f.subfase, ""), ".", -1), " ", 1) AS UNSIGNED) ASC,
-                f.data_inicio ASC,
-                f.fase_id ASC';
+                CAST(SUBSTRING_INDEX(f.fase, " ", 1) AS UNSIGNED) DESC,
+                CAST(SUBSTRING_INDEX(COALESCE(f.subfase, ""), ".", 1) AS UNSIGNED) DESC,
+                CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(COALESCE(f.subfase, ""), ".", -1), " ", 1) AS UNSIGNED) DESC,
+                f.data_inicio DESC,
+                f.fase_id DESC';
     $rows = fetch_all($sql, $params);
     $items = array_map(fn ($r) => [
         'faseId' => (string)$r['fase_id'],
