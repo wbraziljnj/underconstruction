@@ -402,25 +402,24 @@ export default function FasesPage() {
               <th style={{ padding: 10 }}>Responsável</th>
               <th style={{ padding: 10 }}>Status</th>
               <th style={{ padding: 10 }}>Valor Atual</th>
-              <th style={{ padding: 10 }}>Ações</th>
             </tr>
           </thead>
           <tbody>
             {listError ? (
               <tr>
-                <td colSpan={9} style={{ padding: 12, color: 'var(--danger)' }}>
+                <td colSpan={8} style={{ padding: 12, color: 'var(--danger)' }}>
                   {listError}
                 </td>
               </tr>
             ) : loading ? (
               <tr>
-                <td colSpan={9} style={{ padding: 12, opacity: 0.7 }}>
+                <td colSpan={8} style={{ padding: 12, opacity: 0.7 }}>
                   Carregando...
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={9} style={{ padding: 12, opacity: 0.7 }}>
+                <td colSpan={8} style={{ padding: 12, opacity: 0.7 }}>
                   Nenhuma fase encontrada.
                 </td>
               </tr>
@@ -442,21 +441,6 @@ export default function FasesPage() {
                   <td style={{ padding: 10 }}>{r.responsavelNome || '-'}</td>
                   <td style={{ padding: 10, color: statusColor(r.status), fontWeight: 600 }}>{r.status}</td>
                   <td style={{ padding: 10 }}>{r.valorAtual ?? '-'}</td>
-                  <td style={{ padding: 10 }}>
-                    <button
-                      className="btn"
-                      type="button"
-                      title="Editar"
-                      disabled={!canWrite}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEditModal(r);
-                      }}
-                      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                    >
-                      <PencilIcon />
-                    </button>
-                  </td>
                 </tr>
               ))
             )}
