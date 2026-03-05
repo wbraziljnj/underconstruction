@@ -45,6 +45,10 @@ function maskPhone(value: string) {
   return digits.replace(/^(\d{2})(\d{5})(\d{0,4})$/, '($1) $2-$3').trim();
 }
 
+function onlyDigits(value: string) {
+  return String(value || '').replace(/\D/g, '');
+}
+
 const schema = z.object({
   id_principal: z.string().optional(),
   foto: z.string().optional(),
@@ -281,6 +285,9 @@ export default function CadastrosPage() {
         .uc-user-name{ font-weight:900; font-size:18px; text-align:center; letter-spacing:0.1px; }
         .uc-user-field{ display:grid; grid-template-columns: 96px 1fr; gap:4px; font-size:13px; align-items:baseline; }
         .uc-user-field b{ font-weight:800; text-align:right; }
+        .uc-user-links{ display:grid; gap:4px; }
+        .uc-user-links a{ text-decoration: none; }
+        .uc-user-links a:hover{ text-decoration: underline; }
         .uc-user-meta{ display:flex; justify-content:space-between; gap:10px; font-size:12px; opacity:0.75; }
       `}</style>
 
@@ -310,13 +317,38 @@ export default function CadastrosPage() {
                     <b>CPF/CNPJ:</b> <span>{r.cpfCnpj ? maskCpfCnpj(String(r.cpfCnpj)) : '—'}</span>
                   </div>
                   <div className="uc-user-field">
-                    <b>Telefone:</b> <span>{r.telefone ? maskPhone(String(r.telefone)) : '—'}</span>
+                    <b>Telefone:</b>{' '}
+                    <span className="uc-user-links">
+                      {(() => {
+                        const digits = onlyDigits(String(r.telefone || ''));
+                        if (!digits) return <span>—</span>;
+                        const brE164 = digits.startsWith('55') ? digits : `55${digits}`;
+                        const display = maskPhone(digits);
+                        return (
+                          <>
+                            <a href={`tel:+${brE164}`} title="Ligar">
+                              Telefone: {display}
+                            </a>
+                            <a href={`https://wa.me/${brE164}`} target="_blank" rel="noreferrer" title="Abrir WhatsApp">
+                              WhatsApp: {display}
+                            </a>
+                          </>
+                        );
+                      })()}
+                    </span>
                   </div>
                   <div className="uc-user-field">
                     <b>Endereço:</b> <span style={{ wordBreak: 'break-word' }}>{r.endereco || '—'}</span>
                   </div>
                   <div className="uc-user-field">
-                    <b>Email:</b> <span style={{ wordBreak: 'break-word' }}>{r.email || '—'}</span>
+                    <b>Email:</b>{' '}
+                    {r.email ? (
+                      <a href={`mailto:${String(r.email).trim()}`} style={{ wordBreak: 'break-word', textDecoration: 'none' }}>
+                        {String(r.email).trim()}
+                      </a>
+                    ) : (
+                      <span>—</span>
+                    )}
                   </div>
                   <div className="uc-user-field">
                     <b>Status:</b>{' '}
