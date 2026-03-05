@@ -1276,7 +1276,12 @@ if ($relativePath === '/documentacoes' && $method === 'GET') {
         $params[] = $subfase;
     }
 
-    $sql .= ' ORDER BY d.data_inclusao DESC, d.docs_id DESC';
+    $sql .= ' ORDER BY
+                CAST(SUBSTRING_INDEX(COALESCE(d.fase, ""), " ", 1) AS UNSIGNED) DESC,
+                CAST(SUBSTRING_INDEX(COALESCE(d.subfase, ""), ".", 1) AS UNSIGNED) DESC,
+                CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(COALESCE(d.subfase, ""), ".", -1), " ", 1) AS UNSIGNED) DESC,
+                d.data_inclusao DESC,
+                d.docs_id DESC';
     try {
         $rows = fetch_all($sql, $params);
     } catch (Throwable $e) {
