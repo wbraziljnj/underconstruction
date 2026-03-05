@@ -860,8 +860,15 @@ export default function DocumentacoesPage() {
               <div>
                 <div style={{ fontSize: 12, opacity: 0.8 }}>Arquivo</div>
                 <div style={{ fontSize: 12, opacity: 0.7 }}>
-                  {selectedFile ? selectedFile.name : 'Nenhum arquivo selecionado'}
+                  {selectedFile ? selectedFile.name : mode === 'edit' && editing?.arquivoUrl ? 'Arquivo já enviado' : 'Nenhum arquivo selecionado'}
                 </div>
+                {mode === 'edit' && !selectedFile && editing?.arquivoUrl ? (
+                  <div style={{ fontSize: 12, marginTop: 4 }}>
+                    <a href={editing.arquivoUrl} target="_blank" rel="noreferrer">
+                      Abrir arquivo
+                    </a>
+                  </div>
+                ) : null}
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <label className="btn" style={{ cursor: 'pointer' }}>

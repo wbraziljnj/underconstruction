@@ -500,8 +500,15 @@ export default function CadastrosPage() {
               <div>
                 <div style={{ fontSize: 12, opacity: 0.8 }}>Foto (imagem)</div>
                 <div style={{ fontSize: 12, opacity: 0.7 }}>
-                  {selectedPhotoFile ? selectedPhotoFile.name : 'Nenhum arquivo selecionado'}
+                  {selectedPhotoFile ? selectedPhotoFile.name : mode === 'edit' && (editingRow?.foto || form.getValues('foto')) ? 'Arquivo já enviado' : 'Nenhum arquivo selecionado'}
                 </div>
+                {mode === 'edit' && !selectedPhotoFile && (editingRow?.foto || form.getValues('foto')) ? (
+                  <div style={{ fontSize: 12, marginTop: 4 }}>
+                    <a href={resolveUserPhotoSrc(editingRow?.foto || form.getValues('foto'))} target="_blank" rel="noreferrer">
+                      Abrir foto
+                    </a>
+                  </div>
+                ) : null}
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <label className="btn" style={{ cursor: lockFields ? 'not-allowed' : 'pointer', opacity: lockFields ? 0.6 : 1 }}>
