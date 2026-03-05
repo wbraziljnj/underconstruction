@@ -1059,7 +1059,9 @@ if ($relativePath === '/fases' && $method === 'GET') {
             FROM uc_fases f
             LEFT JOIN uc_users u ON u.user_id = f.responsavel_id
             WHERE ' . uc_code_predicate_for_table('uc_fases', 'f.code');
-    $params = [$code, $code, $code];
+    // Ordem dos placeholders no SQL:
+    // 1) ft.code, 2) f.code
+    $params = [$code, $code];
 
     if ($q !== '') {
         $sql .= ' AND (LOWER(f.fase) LIKE ? OR LOWER(u.nome) LIKE ?)';
