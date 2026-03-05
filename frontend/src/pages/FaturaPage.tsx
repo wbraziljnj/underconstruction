@@ -139,6 +139,7 @@ export default function FaturaPage() {
   const [deletePassword, setDeletePassword] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [selectedComprovanteFile, setSelectedComprovanteFile] = useState<File | null>(null);
+  const [removeComprovante, setRemoveComprovante] = useState(false);
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
@@ -250,6 +251,7 @@ export default function FaturaPage() {
             setEditingRow(null);
             setFaseNome('');
             setSelectedComprovanteFile(null);
+            setRemoveComprovante(false);
             form.reset(defaults);
             // recalcula total no front só para UX (backend vai recalcular depois)
             form.setValue('total', (Number(valor) || 0) * (Number(quantidade) || 0), { shouldValidate: true });
@@ -350,6 +352,7 @@ export default function FaturaPage() {
                         setEditingRow(r);
                         setFaseNome(String(r.faseNome || ''));
                         setSelectedComprovanteFile(null);
+                        setRemoveComprovante(false);
                         form.reset({
                           comprovante: r.comprovantePath || '',
                           descricao: r.fatura || '',
@@ -427,9 +430,11 @@ export default function FaturaPage() {
                   } else if (uploaded.filename) {
                     comprovantePath = `uploads/${uploaded.filename}`;
                   }
+                } else if (removeComprovante) {
+                  comprovantePath = '';
                 }
 
-                const payload = { ...values, comprovante: comprovantePath || undefined, total: totalCalc };
+                const payload = { ...values, comprovante: removeComprovante ? '' : (comprovantePath || undefined), total: totalCalc };
 
                 // Regra: se pagamento != pago, limpar data_pagamento
                 if (payload.pagamento !== 'pago') payload.data_pagamento = '';
@@ -486,10 +491,23 @@ export default function FaturaPage() {
                   <input
                     type="file"
                     style={{ display: 'none' }}
-                    onChange={(e) => setSelectedComprovanteFile(e.target.files?.[0] ?? null)}
+                    onChange={(e) => {
+                      setSelectedComprovanteFile(e.target.files?.[0] ?? null);
+                      setRemoveComprovante(false);
+                    }}
                   />
                 </label>
-                <button className="btn" type="button" onClick={() => setSelectedComprovanteFile(null)} disabled={!selectedComprovanteFile}>
+                <button
+                  className="btn"
+                  type="button"
+                  onClick={() => {
+                    setSelectedComprovanteFile(null);
+                    setRemoveComprovante(true);
+                    form.setValue('comprovante', '', { shouldValidate: false });
+                  }}
+                  disabled={!selectedComprovanteFile && !editingRow?.comprovanteUrl}
+                  title="Remove o comprovante salvo ao salvar"
+                >
                   Remover
                 </button>
               </div>

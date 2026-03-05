@@ -2498,8 +2498,18 @@ if (preg_match('#^/faturas/(\\d+)$#', $relativePath, $m) && $method === 'PUT') {
     }
     $dadosPagamento = optional_string($payload['dados_pagamento'] ?? ($payload['dadosPagamento'] ?? null));
     $nfe = optional_string($payload['nfe'] ?? null);
-    $comprovantePath = optional_string($payload['comprovante'] ?? ($payload['comprovantePath'] ?? null));
-    if ($comprovantePath === null || $comprovantePath === '') {
+
+    // Comprovante:
+    // - se o payload NÃO enviar o campo, mantém o existente
+    // - se enviar vazio/null, remove (salva NULL)
+    // - se enviar um path, atualiza
+    $comprovanteProvided = array_key_exists('comprovante', $payload) || array_key_exists('comprovantePath', $payload);
+    $comprovanteRaw = $payload['comprovante'] ?? ($payload['comprovantePath'] ?? null);
+    $comprovantePath = null;
+    if ($comprovanteProvided) {
+        $tmp = optional_string($comprovanteRaw);
+        $comprovantePath = ($tmp === null || $tmp === '') ? null : $tmp;
+    } else {
         $comprovantePath = optional_string($existing['comprovante'] ?? null);
     }
     $notas = optional_string($payload['notas'] ?? null) ?? '';
