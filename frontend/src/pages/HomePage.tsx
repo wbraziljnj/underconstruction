@@ -474,7 +474,7 @@ export default function HomePage() {
 
                       <div className="uc-tl-footer">
                     <button className="btn" type="button" onClick={() => openDetails(t)}>
-                      Ver
+                      Detalhes
                     </button>
                         <div className="uc-tl-resp">
                           <span style={{ opacity: 0.75 }}>Responsável:</span>{' '}
