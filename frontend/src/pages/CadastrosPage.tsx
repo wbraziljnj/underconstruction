@@ -275,10 +275,8 @@ export default function CadastrosPage() {
       </div>
 
       <style>{`
-        .uc-users-grid{ margin-top:12px; display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:12px; }
-        @media (max-width: 980px){ .uc-users-grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-        @media (max-width: 680px){ .uc-users-grid{ grid-template-columns: 1fr; } }
-        .uc-user-card{ padding:14px; display:grid; gap:12px; }
+        .uc-users-grid{ margin-top:12px; display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:12px; }
+        .uc-user-card{ padding:14px; display:grid; gap:12px; max-width: 360px; margin: 0 auto; width: 100%; }
         .uc-user-avatar{ width:110px; height:110px; border-radius:999px; object-fit:cover; border:1px solid var(--border); box-shadow: 0 8px 22px rgba(0,0,0,0.18); margin: 4px auto 0; background: rgba(255,255,255,0.04); }
         .uc-user-name{ font-weight:900; font-size:18px; text-align:center; letter-spacing:0.1px; }
         .uc-user-field{ display:grid; grid-template-columns: 130px 1fr; gap:8px; font-size:13px; }
