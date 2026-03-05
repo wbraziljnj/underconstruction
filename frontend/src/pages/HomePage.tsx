@@ -542,11 +542,6 @@ export default function HomePage() {
                               Pagamento: {f.pagamento}
                             </span>
                           ) : null}
-                          {f.status ? (
-                            <span style={{ fontSize: 11, padding: '4px 8px', borderRadius: 999, background: statusStyle(f.status).bg, border: `1px solid ${statusStyle(f.status).bd}`, color: statusStyle(f.status).fg }}>
-                              {statusStyle(f.status).label}
-                            </span>
-                          ) : null}
                         </div>
                       </div>
                       <div style={{ fontSize: 12, opacity: 0.85, marginTop: 4 }}>{f.fase || '—'}</div>
