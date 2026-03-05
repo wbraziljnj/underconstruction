@@ -22,6 +22,24 @@ export function Sidebar({
   onToggleTheme: () => void;
   onToggle: () => void;
 }) {
+  const sideBtnBase: React.CSSProperties = {
+    boxSizing: 'border-box',
+    width: '100%',
+    height: 44,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    padding: '10px 12px',
+    borderRadius: 12,
+    border: '1px solid var(--border)',
+    background: 'transparent',
+    textDecoration: 'none',
+    color: 'inherit'
+  };
+  const sideBtnCollapsed: React.CSSProperties = collapsed
+    ? { width: 44, margin: '0 auto', justifyContent: 'center', padding: 0, gap: 0 }
+    : {};
+
   return (
     <aside
       className="card"
@@ -37,36 +55,61 @@ export function Sidebar({
         flexDirection: 'column'
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 6 }}>
+      <div style={{ marginTop: 6, display: 'grid', gap: 6 }}>
         <button
           type="button"
           className="btn"
           onClick={onToggleTheme}
           title="Claro/Escuro"
           style={{
-            width: 36,
-            height: 36,
-            borderRadius: 12,
-            display: 'grid',
-            placeItems: 'center',
-            background: 'rgba(124, 92, 255, 0.22)',
-            border: '1px solid rgba(124, 92, 255, 0.5)',
-            padding: 0
+            ...sideBtnBase,
+            ...sideBtnCollapsed,
+            background: 'rgba(124, 92, 255, 0.12)',
+            borderColor: 'rgba(124, 92, 255, 0.45)',
+            justifyContent: collapsed ? 'center' : 'flex-start'
           }}
         >
-          UC
+          <span
+            style={{
+              width: collapsed ? 36 : 28,
+              height: collapsed ? 36 : 28,
+              display: 'grid',
+              placeItems: 'center',
+              borderRadius: 10,
+              border: '1px solid rgba(124, 92, 255, 0.35)',
+              background: 'rgba(0,0,0,0.10)',
+              overflow: 'hidden'
+            }}
+          >
+            <img
+              src={`${(import.meta as any).env?.BASE_URL ?? '/'}underconstruction-logo.png`}
+              alt="Under Construction"
+              style={{
+                width: collapsed ? 34 : 26,
+                height: collapsed ? 34 : 26,
+                objectFit: 'contain',
+                display: 'block'
+              }}
+            />
+          </span>
+          {!collapsed ? <span>Tema</span> : null}
         </button>
-        {!collapsed && (
-          <div style={{ lineHeight: 1.1 }}>
-            <div style={{ fontWeight: 700 }}>Under</div>
-            <div style={{ fontWeight: 700 }}>Construction</div>
-          </div>
-        )}
-      </div>
 
-      <button className="btn" onClick={onToggle} style={{ width: '100%', marginTop: 8 }}>
-        {collapsed ? '»' : '«'}
-      </button>
+        <button
+          className="btn"
+          onClick={onToggle}
+          type="button"
+          title="Expandir/Recolher"
+          style={{
+            ...sideBtnBase,
+            ...sideBtnCollapsed,
+            justifyContent: collapsed ? 'center' : 'flex-start'
+          }}
+        >
+          <span style={{ width: 22, textAlign: 'center' }}>{collapsed ? '»' : '«'}</span>
+          {!collapsed ? <span>Menu</span> : null}
+        </button>
+      </div>
 
       <nav style={{ marginTop: 10, display: 'grid', gap: 6, flex: 1, alignContent: 'start' }}>
         {items.map((it) => (
@@ -75,13 +118,8 @@ export function Sidebar({
             to={it.to}
             title={collapsed ? it.label : undefined}
             style={({ isActive }) => ({
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              padding: '10px 12px',
-              borderRadius: 12,
-              textDecoration: 'none',
-              border: '1px solid var(--border)',
+              ...sideBtnBase,
+              ...(collapsed ? { ...sideBtnCollapsed, justifyContent: 'center' } : {}),
               background: isActive ? 'rgba(124, 92, 255, 0.22)' : 'transparent'
             })}
           >
@@ -96,7 +134,12 @@ export function Sidebar({
         type="button"
         onClick={onLogout}
         title="Sair"
-        style={{ width: '100%', marginTop: 10, display: 'flex', justifyContent: 'center' }}
+        style={{
+          ...sideBtnBase,
+          ...sideBtnCollapsed,
+          justifyContent: 'center',
+          marginTop: 10
+        }}
       >
         <span style={{ width: 22, textAlign: 'center' }}>⏻</span>
       </button>
