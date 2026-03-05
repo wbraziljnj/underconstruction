@@ -7,6 +7,7 @@ import { apiFetch } from '../api/client';
 import { useEffect } from 'react';
 import { useAuth } from '../auth/auth';
 import { FASES_FIXAS } from '../ui/fasesFixas';
+import { getPhaseIcon } from '../ui/phaseIcons';
 
 const schema = z
   .object({
@@ -130,6 +131,8 @@ export default function FaturaPage() {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<'create' | 'edit'>('create');
   const [editingRow, setEditingRow] = useState<any | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsRow, setDetailsRow] = useState<any | null>(null);
   const [saving, setSaving] = useState(false);
   const [users, setUsers] = useState<UserOption[]>([]);
   const [fases, setFases] = useState<FaseOption[]>([]);
@@ -191,6 +194,34 @@ export default function FaturaPage() {
 
   const valor = form.watch('valor');
   const quantidade = form.watch('quantidade');
+
+  function openEditModal(row: any) {
+    setMode('edit');
+    setEditingRow(row);
+    setFaseNome(String(row?.faseNome || ''));
+    setSelectedComprovanteFile(null);
+    setRemoveComprovante(false);
+    form.reset({
+      comprovante: row?.comprovantePath || '',
+      descricao: row?.fatura || '',
+      data: toDateOnlyLocal(row?.data),
+      lancamento: toDateOnlyLocal(row?.lancamento) || toDateOnlyLocal(new Date().toISOString()),
+      data_pagamento: toDateOnlyLocal(row?.dataPagamento),
+      dados_pagamento: row?.dadosPagamento || '',
+      nfe: row?.nfe || '',
+      notas: row?.notas || '',
+      status: row?.status || 'ATIVO',
+      pagamento: row?.pagamento || 'aberto',
+      valor: Number(row?.valor || 0),
+      quantidade: Number(row?.quantidade || 0),
+      total: Number(row?.total || 0),
+      fase_id: String(row?.faseId ?? ''),
+      subfase: row?.subfase || '',
+      responsavel_id: row?.responsavelId ? String(row.responsavelId) : '',
+      empresa_id: row?.empresaId ? String(row.empresaId) : ''
+    });
+    setOpen(true);
+  }
 
   async function load() {
     setLoading(true);
@@ -300,31 +331,37 @@ export default function FaturaPage() {
               <th style={{ padding: 10 }}>Total</th>
               <th style={{ padding: 10 }}>Pagamento</th>
               <th style={{ padding: 10 }}>Comprovante</th>
-              <th style={{ padding: 10 }}>Ações</th>
             </tr>
           </thead>
           <tbody>
             {listError ? (
               <tr>
-                <td colSpan={9} style={{ padding: 12, color: 'var(--danger)' }}>
+                <td colSpan={8} style={{ padding: 12, color: 'var(--danger)' }}>
                   {listError}
                 </td>
               </tr>
             ) : loading ? (
               <tr>
-                <td colSpan={9} style={{ padding: 12, opacity: 0.7 }}>
+                <td colSpan={8} style={{ padding: 12, opacity: 0.7 }}>
                   Carregando...
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={9} style={{ padding: 12, opacity: 0.7 }}>
+                <td colSpan={8} style={{ padding: 12, opacity: 0.7 }}>
                   Nenhuma fatura encontrada.
                 </td>
               </tr>
             ) : (
               rows.map((r) => (
-                <tr key={r.faturaId} style={{ borderTop: '1px solid var(--border)' }}>
+                <tr
+                  key={r.faturaId}
+                  style={{ borderTop: '1px solid var(--border)', cursor: 'pointer' }}
+                  onClick={() => {
+                    setDetailsRow(r);
+                    setDetailsOpen(true);
+                  }}
+                >
                   <td style={{ padding: 10 }}>{r.fatura}</td>
                   <td style={{ padding: 10, opacity: 0.7, fontSize: 12 }}>{r.faseNome || '-'}</td>
                   <td style={{ padding: 10 }}>{formatBrDate(r.data)}</td>
@@ -341,50 +378,120 @@ export default function FaturaPage() {
                       '-'
                     )}
                   </td>
-                  <td style={{ padding: 10 }}>
-                    <button
-                      className="btn"
-                      type="button"
-                      title="Editar"
-                      disabled={!canWrite}
-                      onClick={() => {
-                        setMode('edit');
-                        setEditingRow(r);
-                        setFaseNome(String(r.faseNome || ''));
-                        setSelectedComprovanteFile(null);
-                        setRemoveComprovante(false);
-                        form.reset({
-                          comprovante: r.comprovantePath || '',
-                          descricao: r.fatura || '',
-                          data: toDateOnlyLocal(r.data),
-                          lancamento: toDateOnlyLocal(r.lancamento) || toDateOnlyLocal(new Date().toISOString()),
-                          data_pagamento: toDateOnlyLocal(r.dataPagamento),
-                          dados_pagamento: r.dadosPagamento || '',
-                          nfe: r.nfe || '',
-                          notas: r.notas || '',
-                          status: r.status || 'ATIVO',
-                          pagamento: r.pagamento || 'aberto',
-                          valor: Number(r.valor || 0),
-                          quantidade: Number(r.quantidade || 0),
-                          total: Number(r.total || 0),
-                          fase_id: String(r.faseId ?? ''),
-                          subfase: r.subfase || '',
-                          responsavel_id: r.responsavelId ? String(r.responsavelId) : '',
-                          empresa_id: r.empresaId ? String(r.empresaId) : ''
-                        });
-                        setOpen(true);
-                      }}
-                      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                    >
-                      <PencilIcon />
-                    </button>
-                  </td>
                 </tr>
               ))
             )}
           </tbody>
         </table>
       </div>
+
+      <Modal open={detailsOpen} title="Detalhes da fatura" onClose={() => setDetailsOpen(false)} footer={null}>
+        {detailsRow ? (
+          <>
+            <style>{`
+              .uc-fat-card{ padding:14px; display:grid; gap:12px; max-width: 720px; margin: 0 auto; width:100%; }
+              .uc-fat-avatar{ width:120px; height:120px; border-radius:999px; border:1px solid var(--border); display:flex; align-items:center; justify-content:center; font-size:44px; margin: 4px auto 0; background: rgba(255,255,255,0.04); box-shadow: 0 8px 22px rgba(0,0,0,0.18); }
+              .uc-fat-title{ font-weight:900; font-size:18px; text-align:center; letter-spacing:0.1px; }
+              .uc-fat-sub{ text-align:center; opacity:0.75; font-size:12px; margin-top:-6px; }
+              .uc-fat-field{ display:grid; grid-template-columns: 140px 1fr; gap:6px; font-size:13px; align-items:baseline; }
+              .uc-fat-field b{ font-weight:800; text-align:right; }
+              .uc-fat-scroll{ max-height: 78vh; overflow:auto; padding-right: 2px; }
+            `}</style>
+            <div className="uc-fat-scroll">
+              <div className="card uc-fat-card">
+                <div className="uc-fat-avatar" title={detailsRow.faseNome || ''}>
+                  {getPhaseIcon(String(detailsRow.faseNome || detailsRow.fase || ''))}
+                </div>
+                <div className="uc-fat-title">{detailsRow.fatura || '—'}</div>
+                <div className="uc-fat-sub">{detailsRow.subfase || detailsRow.faseNome || '—'}</div>
+
+                <div style={{ display: 'grid', gap: 8 }}>
+                  <div className="uc-fat-field">
+                    <b>ID:</b> <span>{String(detailsRow.faturaId ?? '—')}</span>
+                  </div>
+                  <div className="uc-fat-field">
+                    <b>Fase:</b> <span>{detailsRow.faseNome || '—'}</span>
+                  </div>
+                  <div className="uc-fat-field">
+                    <b>Subfase:</b> <span>{detailsRow.subfase || '—'}</span>
+                  </div>
+                  <div className="uc-fat-field">
+                    <b>Data:</b> <span>{detailsRow.data ? formatBrDate(detailsRow.data) : '—'}</span>
+                  </div>
+                  <div className="uc-fat-field">
+                    <b>Lançamento:</b> <span>{detailsRow.lancamento ? formatBrDate(detailsRow.lancamento) : '—'}</span>
+                  </div>
+                  <div className="uc-fat-field">
+                    <b>Pagamento:</b>{' '}
+                    <span style={{ color: pagamentoColor(detailsRow.pagamento), fontWeight: 800 }}>{detailsRow.pagamento || '—'}</span>
+                  </div>
+                  <div className="uc-fat-field">
+                    <b>Data pgto:</b> <span>{detailsRow.dataPagamento ? formatBrDate(detailsRow.dataPagamento) : '—'}</span>
+                  </div>
+                  <div className="uc-fat-field">
+                    <b>Valor:</b> <span>{detailsRow.valor ?? '—'}</span>
+                  </div>
+                  <div className="uc-fat-field">
+                    <b>Quantidade:</b> <span>{detailsRow.quantidade ?? '—'}</span>
+                  </div>
+                  <div className="uc-fat-field">
+                    <b>Total:</b> <span>{detailsRow.total ?? '—'}</span>
+                  </div>
+                  <div className="uc-fat-field">
+                    <b>Responsável:</b> <span>{detailsRow.responsavelNome || '—'}</span>
+                  </div>
+                  <div className="uc-fat-field">
+                    <b>Empresa:</b> <span>{detailsRow.empresaNome || '—'}</span>
+                  </div>
+                  <div className="uc-fat-field">
+                    <b>Dados pgto:</b> <span style={{ wordBreak: 'break-word' }}>{detailsRow.dadosPagamento || '—'}</span>
+                  </div>
+                  <div className="uc-fat-field">
+                    <b>NF-e:</b> <span style={{ wordBreak: 'break-word' }}>{detailsRow.nfe || '—'}</span>
+                  </div>
+                  <div className="uc-fat-field">
+                    <b>Notas:</b> <span style={{ wordBreak: 'break-word' }}>{detailsRow.notas || '—'}</span>
+                  </div>
+                  <div className="uc-fat-field">
+                    <b>Comprovante:</b>{' '}
+                    {detailsRow.comprovanteUrl ? (
+                      <a href={detailsRow.comprovanteUrl} target="_blank" rel="noreferrer">
+                        Abrir
+                      </a>
+                    ) : (
+                      <span>—</span>
+                    )}
+                  </div>
+                  <div className="uc-fat-field">
+                    <b>created_at:</b> <span>{detailsRow.createdAt || '—'}</span>
+                  </div>
+                  <div className="uc-fat-field">
+                    <b>updated_at:</b> <span>{detailsRow.updatedAt || '—'}</span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: 6 }}>
+                  <button
+                    className="btn"
+                    type="button"
+                    disabled={!canWrite}
+                    onClick={() => {
+                      setDetailsOpen(false);
+                      openEditModal(detailsRow);
+                    }}
+                    title="Editar fatura"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                  >
+                    <PencilIcon /> Editar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div style={{ opacity: 0.7, fontSize: 13 }}>Nenhuma fatura selecionada.</div>
+        )}
+      </Modal>
 
       <Modal
         open={open}

@@ -7,6 +7,7 @@ import { useAuth } from '../auth/auth';
 import Modal from '../ui/Modal';
 import ConfirmPasswordModal from '../ui/ConfirmPasswordModal';
 import { useConfirmPassword } from '../ui/useConfirmPassword';
+import { getPhaseIcon } from '../ui/phaseIcons';
 
 type Documento = {
   docsId: number;
@@ -285,6 +286,8 @@ export default function DocumentacoesPage() {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<'create' | 'edit'>('create');
   const [editing, setEditing] = useState<Documento | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsRow, setDetailsRow] = useState<Documento | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -430,6 +433,11 @@ export default function DocumentacoesPage() {
     setOpen(true);
   }
 
+  function openDetails(row: Documento) {
+    setDetailsRow(row);
+    setDetailsOpen(true);
+  }
+
   return (
     <div className="card" style={{ padding: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
@@ -492,31 +500,34 @@ export default function DocumentacoesPage() {
               <th style={{ padding: 10 }}>Inclusão</th>
               <th style={{ padding: 10 }}>Entrega</th>
               <th style={{ padding: 10 }}>Arquivo</th>
-              <th style={{ padding: 10 }}>Ações</th>
             </tr>
           </thead>
           <tbody>
             {listError ? (
               <tr>
-                <td colSpan={10} style={{ padding: 12, color: 'var(--danger)' }}>
+                <td colSpan={9} style={{ padding: 12, color: 'var(--danger)' }}>
                   {listError}
                 </td>
               </tr>
             ) : loading ? (
               <tr>
-                <td colSpan={10} style={{ padding: 12, opacity: 0.7 }}>
+                <td colSpan={9} style={{ padding: 12, opacity: 0.7 }}>
                   Carregando...
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={10} style={{ padding: 12, opacity: 0.7 }}>
+                <td colSpan={9} style={{ padding: 12, opacity: 0.7 }}>
                   Nenhum registro encontrado.
                 </td>
               </tr>
             ) : (
               rows.map((r) => (
-                <tr key={r.docsId} style={{ borderTop: '1px solid var(--border)' }}>
+                <tr
+                  key={r.docsId}
+                  style={{ borderTop: '1px solid var(--border)', cursor: 'pointer' }}
+                  onClick={() => openDetails(r)}
+                >
                   <td style={{ padding: 10 }}>{r.documento}</td>
                   <td style={{ padding: 10, opacity: 0.85 }}>{r.fase}</td>
                   <td style={{ padding: 10, opacity: 0.85 }}>{r.subfase || '-'}</td>
@@ -536,24 +547,113 @@ export default function DocumentacoesPage() {
                       '-'
                     )}
                   </td>
-                  <td style={{ padding: 10 }}>
-                    <button
-                      className="btn"
-                      type="button"
-                      title="Editar"
-                      disabled={!canWrite}
-                      onClick={() => openEdit(r)}
-                      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                    >
-                      <PencilIcon />
-                    </button>
-                  </td>
                 </tr>
               ))
             )}
           </tbody>
         </table>
       </div>
+
+      <Modal open={detailsOpen} title="Detalhes do documento" onClose={() => setDetailsOpen(false)} footer={null}>
+        {detailsRow ? (
+          <>
+            <style>{`
+              .uc-doc-card{ padding:14px; display:grid; gap:12px; max-width: 720px; margin: 0 auto; width:100%; }
+              .uc-doc-avatar{ width:120px; height:120px; border-radius:999px; border:1px solid var(--border); display:flex; align-items:center; justify-content:center; font-size:44px; margin: 4px auto 0; background: rgba(255,255,255,0.04); box-shadow: 0 8px 22px rgba(0,0,0,0.18); }
+              .uc-doc-title{ font-weight:900; font-size:18px; text-align:center; letter-spacing:0.1px; }
+              .uc-doc-sub{ text-align:center; opacity:0.75; font-size:12px; margin-top:-6px; }
+              .uc-doc-field{ display:grid; grid-template-columns: 140px 1fr; gap:6px; font-size:13px; align-items:baseline; }
+              .uc-doc-field b{ font-weight:800; text-align:right; }
+              .uc-doc-scroll{ max-height: 78vh; overflow:auto; padding-right: 2px; }
+            `}</style>
+            <div className="uc-doc-scroll">
+              <div className="card uc-doc-card">
+                <div className="uc-doc-avatar" title={detailsRow.fase || ''}>
+                  {getPhaseIcon(String(detailsRow.fase || ''))}
+                </div>
+                <div className="uc-doc-title">{detailsRow.documento || '—'}</div>
+                <div className="uc-doc-sub">{detailsRow.subfase || detailsRow.fase || '—'}</div>
+
+                <div style={{ display: 'grid', gap: 8 }}>
+                  <div className="uc-doc-field">
+                    <b>ID:</b> <span>{String(detailsRow.docsId ?? '—')}</span>
+                  </div>
+                  <div className="uc-doc-field">
+                    <b>Status:</b>{' '}
+                    <span style={{ color: statusColor(detailsRow.status), fontWeight: 800 }}>{detailsRow.status || '—'}</span>
+                  </div>
+                  <div className="uc-doc-field">
+                    <b>Fase:</b> <span>{detailsRow.fase || '—'}</span>
+                  </div>
+                  <div className="uc-doc-field">
+                    <b>Subfase:</b> <span>{detailsRow.subfase || '—'}</span>
+                  </div>
+                  <div className="uc-doc-field">
+                    <b>Fatura:</b>{' '}
+                    <span>{detailsRow.faturaDescricao || (detailsRow.faturaId ? `#${detailsRow.faturaId}` : '—')}</span>
+                  </div>
+                  <div className="uc-doc-field">
+                    <b>Responsável:</b> <span>{detailsRow.responsavelNome || '—'}</span>
+                  </div>
+                  <div className="uc-doc-field">
+                    <b>Inclusão:</b> <span>{detailsRow.dataInclusao ? formatBrDate(detailsRow.dataInclusao) : '—'}</span>
+                  </div>
+                  <div className="uc-doc-field">
+                    <b>Entrega:</b> <span>{detailsRow.dataEntrega ? formatBrDate(detailsRow.dataEntrega) : '—'}</span>
+                  </div>
+                  <div className="uc-doc-field">
+                    <b>Arquivo:</b>{' '}
+                    {detailsRow.arquivoUrl ? (
+                      <a href={detailsRow.arquivoUrl} target="_blank" rel="noreferrer">
+                        Abrir
+                      </a>
+                    ) : (
+                      <span>—</span>
+                    )}
+                  </div>
+                  <div className="uc-doc-field">
+                    <b>Dados pgto:</b>{' '}
+                    <span style={{ wordBreak: 'break-word' }}>{detailsRow.dadosPagamento || '—'}</span>
+                  </div>
+                  <div className="uc-doc-field">
+                    <b>Tipo assinatura:</b> <span style={{ wordBreak: 'break-word' }}>{detailsRow.tipoAssinatura || '—'}</span>
+                  </div>
+                  <div className="uc-doc-field">
+                    <b>Assinatura:</b> <span style={{ wordBreak: 'break-word' }}>{detailsRow.assinaturaNome || '—'}</span>
+                  </div>
+                  <div className="uc-doc-field">
+                    <b>Notas:</b> <span style={{ wordBreak: 'break-word' }}>{detailsRow.notas || '—'}</span>
+                  </div>
+                  <div className="uc-doc-field">
+                    <b>created_at:</b> <span>{detailsRow.createdAt || '—'}</span>
+                  </div>
+                  <div className="uc-doc-field">
+                    <b>updated_at:</b> <span>{detailsRow.updatedAt || '—'}</span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: 6 }}>
+                  <button
+                    className="btn"
+                    type="button"
+                    disabled={!canWrite}
+                    onClick={() => {
+                      setDetailsOpen(false);
+                      openEdit(detailsRow);
+                    }}
+                    title="Editar documento"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                  >
+                    <PencilIcon /> Editar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div style={{ opacity: 0.7, fontSize: 13 }}>Nenhum documento selecionado.</div>
+        )}
+      </Modal>
 
       <Modal
         open={open}
