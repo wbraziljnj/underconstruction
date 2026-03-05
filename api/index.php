@@ -1204,11 +1204,11 @@ if ($relativePath === '/home/timeline' && $method === 'GET') {
             WHERE ' . uc_code_predicate_for_table('uc_fases', 'f.code') . '
             GROUP BY f.fase_id, f.fase, f.subfase, f.status, f.data_inicio, f.previsao_finalizacao, f.data_finalizacao, f.responsavel_id, u.nome
             ORDER BY
-                CAST(SUBSTRING_INDEX(f.fase, " ", 1) AS UNSIGNED) ASC,
-                CAST(SUBSTRING_INDEX(COALESCE(f.subfase, ""), ".", 1) AS UNSIGNED) ASC,
-                CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(COALESCE(f.subfase, ""), ".", -1), " ", 1) AS UNSIGNED) ASC,
-                f.data_inicio ASC,
-                f.fase_id ASC';
+                CAST(SUBSTRING_INDEX(f.fase, " ", 1) AS UNSIGNED) DESC,
+                CAST(SUBSTRING_INDEX(COALESCE(f.subfase, ""), ".", 1) AS UNSIGNED) DESC,
+                CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(COALESCE(f.subfase, ""), ".", -1), " ", 1) AS UNSIGNED) DESC,
+                f.data_inicio DESC,
+                f.fase_id DESC';
     $params = [$code, 'Owner', $code, $code, $code];
 
     try {
