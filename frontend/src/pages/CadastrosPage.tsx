@@ -279,8 +279,8 @@ export default function CadastrosPage() {
         .uc-user-card{ padding:14px; display:grid; gap:12px; max-width: 360px; margin: 0 auto; width: 100%; }
         .uc-user-avatar{ width:110px; height:110px; border-radius:999px; object-fit:cover; border:1px solid var(--border); box-shadow: 0 8px 22px rgba(0,0,0,0.18); margin: 4px auto 0; background: rgba(255,255,255,0.04); }
         .uc-user-name{ font-weight:900; font-size:18px; text-align:center; letter-spacing:0.1px; }
-        .uc-user-field{ display:grid; grid-template-columns: 130px 1fr; gap:8px; font-size:13px; }
-        .uc-user-field b{ font-weight:800; }
+        .uc-user-field{ display:grid; grid-template-columns: 96px 1fr; gap:4px; font-size:13px; align-items:baseline; }
+        .uc-user-field b{ font-weight:800; text-align:right; }
         .uc-user-meta{ display:flex; justify-content:space-between; gap:10px; font-size:12px; opacity:0.75; }
       `}</style>
 
