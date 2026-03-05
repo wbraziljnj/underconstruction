@@ -427,7 +427,7 @@ export default function FasesPage() {
               rows.map((r) => (
                 <tr
                   key={r.faseId}
-                  style={{ borderTop: '1px solid var(--border)', cursor: 'pointer' }}
+                  style={{ borderTop: '1px solid var(--border)' }}
                   onClick={() => {
                     setDetailsRow(r);
                     setDetailsOpen(true);

@@ -525,7 +525,7 @@ export default function DocumentacoesPage() {
               rows.map((r) => (
                 <tr
                   key={r.docsId}
-                  style={{ borderTop: '1px solid var(--border)', cursor: 'pointer' }}
+                  style={{ borderTop: '1px solid var(--border)' }}
                   onClick={() => openDetails(r)}
                 >
                   <td style={{ padding: 10 }}>{r.documento}</td>
@@ -540,7 +540,7 @@ export default function DocumentacoesPage() {
                   <td style={{ padding: 10 }}>{formatBrDate(r.dataEntrega)}</td>
                   <td style={{ padding: 10 }}>
                     {r.arquivoUrl ? (
-                      <a href={r.arquivoUrl} target="_blank" rel="noreferrer">
+                      <a href={r.arquivoUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
                         Abrir
                       </a>
                     ) : (

@@ -356,7 +356,7 @@ export default function FaturaPage() {
               rows.map((r) => (
                 <tr
                   key={r.faturaId}
-                  style={{ borderTop: '1px solid var(--border)', cursor: 'pointer' }}
+                  style={{ borderTop: '1px solid var(--border)' }}
                   onClick={() => {
                     setDetailsRow(r);
                     setDetailsOpen(true);
@@ -371,7 +371,12 @@ export default function FaturaPage() {
                   <td style={{ padding: 10, color: pagamentoColor(r.pagamento), fontWeight: 600 }}>{r.pagamento}</td>
                   <td style={{ padding: 10 }}>
                     {r.comprovanteUrl ? (
-                      <a href={r.comprovanteUrl} target="_blank" rel="noreferrer">
+                      <a
+                        href={r.comprovanteUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         Abrir
                       </a>
                     ) : (
