@@ -103,6 +103,25 @@ function fetch_one(string $query, array $params = []): array|false
 function start_session_if_needed(): void
 {
     if (session_status() !== PHP_SESSION_ACTIVE) {
+        // Mantém sessão viva por mais tempo (evita deslogar no uso normal).
+        // Ainda pode expirar se o navegador apagar cookies ou o usuário clicar em "Sair".
+        $lifetime = 60 * 60 * 24 * 30; // 30 dias
+        @ini_set('session.gc_maxlifetime', (string)$lifetime);
+        @ini_set('session.cookie_lifetime', (string)$lifetime);
+        @ini_set('session.cookie_httponly', '1');
+        // Em produção o sistema roda em HTTPS; em dev pode ser http.
+        $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+        if (PHP_VERSION_ID >= 70300) {
+            @session_set_cookie_params([
+                'lifetime' => $lifetime,
+                'path' => '/',
+                'secure' => $secure,
+                'httponly' => true,
+                'samesite' => 'Lax',
+            ]);
+        } else {
+            @session_set_cookie_params($lifetime, '/; samesite=Lax', '', $secure, true);
+        }
         session_start();
     }
 }

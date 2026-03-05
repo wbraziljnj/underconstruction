@@ -24,9 +24,6 @@ export default function AppShell() {
   const headerRight = useMemo(() => {
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <button className="btn" onClick={() => toggleTheme()} title="Tema">
-          🌓
-        </button>
         {user?.codes?.length ? (
           <select
             className="input"
@@ -50,21 +47,16 @@ export default function AppShell() {
             ))}
           </select>
         ) : null}
-        <div style={{ display: 'grid', lineHeight: 1.1 }}>
-          <div style={{ opacity: 0.9, fontSize: 12 }}>{user?.nome}</div>
-          <div style={{ opacity: 0.7, fontSize: 12 }}>{user?.tipoUsuario || ''}</div>
-        </div>
-        <button className="btn" onClick={() => logout()} title="Sair">
-          Sair
-        </button>
       </div>
     );
-  }, [logout, selectObra, user?.activeCode, user?.codes, user?.nome, user?.tipoUsuario]);
+  }, [selectObra, user?.activeCode, user?.codes]);
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 12, padding: 12 }}>
       <Sidebar
         collapsed={collapsed}
+        onLogout={logout}
+        onToggleTheme={() => toggleTheme()}
         onToggle={() => {
           const next = !collapsed;
           setCollapsed(next);
@@ -83,8 +75,8 @@ export default function AppShell() {
           }}
         >
           <div>
-            <div style={{ fontWeight: 700 }}>Under Construction</div>
-            <div style={{ opacity: 0.7, fontSize: 12 }}>Organização da obra</div>
+            <div style={{ fontWeight: 800 }}>{user?.nome || '—'}</div>
+            <div style={{ opacity: 0.75, fontSize: 12 }}>{user?.tipoUsuario || ''}</div>
           </div>
           {headerRight}
         </header>

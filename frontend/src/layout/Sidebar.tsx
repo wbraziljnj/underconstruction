@@ -13,9 +13,13 @@ const items: Item[] = [
 
 export function Sidebar({
   collapsed,
+  onLogout,
+  onToggleTheme,
   onToggle
 }: {
   collapsed: boolean;
+  onLogout: () => void;
+  onToggleTheme: () => void;
   onToggle: () => void;
 }) {
   return (
@@ -28,11 +32,17 @@ export function Sidebar({
         position: 'sticky',
         top: 12,
         height: 'calc(100vh - 24px)',
-        overflow: 'hidden'
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column'
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 6 }}>
-        <div
+        <button
+          type="button"
+          className="btn"
+          onClick={onToggleTheme}
+          title="Claro/Escuro"
           style={{
             width: 36,
             height: 36,
@@ -40,11 +50,12 @@ export function Sidebar({
             display: 'grid',
             placeItems: 'center',
             background: 'rgba(124, 92, 255, 0.22)',
-            border: '1px solid rgba(124, 92, 255, 0.5)'
+            border: '1px solid rgba(124, 92, 255, 0.5)',
+            padding: 0
           }}
         >
           UC
-        </div>
+        </button>
         {!collapsed && (
           <div style={{ lineHeight: 1.1 }}>
             <div style={{ fontWeight: 700 }}>Under</div>
@@ -57,7 +68,7 @@ export function Sidebar({
         {collapsed ? '»' : '«'}
       </button>
 
-      <nav style={{ marginTop: 10, display: 'grid', gap: 6 }}>
+      <nav style={{ marginTop: 10, display: 'grid', gap: 6, flex: 1, alignContent: 'start' }}>
         {items.map((it) => (
           <NavLink
             key={it.to}
@@ -79,6 +90,16 @@ export function Sidebar({
           </NavLink>
         ))}
       </nav>
+
+      <button
+        className="btn"
+        type="button"
+        onClick={onLogout}
+        title="Sair"
+        style={{ width: '100%', marginTop: 10, display: 'flex', justifyContent: 'center' }}
+      >
+        <span style={{ width: 22, textAlign: 'center' }}>⏻</span>
+      </button>
     </aside>
   );
 }

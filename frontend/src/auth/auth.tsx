@@ -59,6 +59,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Keep-alive: evita expiração da sessão no servidor enquanto o usuário estiver com o app aberto.
+  useEffect(() => {
+    if (!user) return;
+    const id = window.setInterval(() => {
+      apiFetch('/me', { method: 'GET' }).catch(() => null);
+    }, 1000 * 60 * 5); // 5 min
+    return () => window.clearInterval(id);
+  }, [user?.userId]);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,

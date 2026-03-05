@@ -951,12 +951,15 @@ if ($relativePath === '/fases' && $method === 'GET') {
     $sql = 'SELECT f.fase_id, f.fase, f.subfase, f.data_inicio, f.previsao_finalizacao, f.data_finalizacao, f.responsavel_id,
                    f.status, f.valor_previsao, f.notas, f.created_at, f.updated_at,
                    u.nome AS responsavel_nome,
-                   COALESCE(SUM(ft.total), 0) AS valor_atual
+                   (
+                     COALESCE((SELECT SUM(ft.total) FROM uc_faturas ft WHERE ft.fase_id = f.fase_id AND ' . uc_code_predicate_for_table('uc_faturas', 'ft.code') . '), 0)
+                     +
+                     COALESCE((SELECT SUM(d.valor) FROM uc_documentacoes d WHERE (d.fase COLLATE utf8mb4_unicode_ci) = (f.fase COLLATE utf8mb4_unicode_ci) AND ' . uc_code_predicate_for_table('uc_documentacoes', 'd.code') . '), 0)
+                   ) AS valor_atual
             FROM uc_fases f
             LEFT JOIN uc_users u ON u.user_id = f.responsavel_id AND ' . uc_users_code_predicate('u.code') . '
-            LEFT JOIN uc_faturas ft ON ft.fase_id = f.fase_id AND ' . uc_code_predicate_for_table('uc_faturas', 'ft.code') . '
             WHERE ' . uc_code_predicate_for_table('uc_fases', 'f.code');
-    $params = [$code, $code, $code];
+    $params = [$code, $code, $code, $code];
 
     if ($q !== '') {
         $sql .= ' AND (LOWER(f.fase) LIKE ? OR LOWER(u.nome) LIKE ?)';
@@ -970,8 +973,7 @@ if ($relativePath === '/fases' && $method === 'GET') {
         $params[] = $statusFilter;
     }
 
-    $sql .= ' GROUP BY f.fase_id, f.fase, f.subfase, f.data_inicio, f.previsao_finalizacao, f.data_finalizacao, f.responsavel_id, f.status, f.valor_previsao, f.notas, f.created_at, f.updated_at, u.nome
-              ORDER BY f.data_inicio ASC';
+    $sql .= ' ORDER BY f.data_inicio ASC';
     $rows = fetch_all($sql, $params);
     $items = array_map(fn ($r) => [
         'faseId' => (string)$r['fase_id'],

@@ -204,14 +204,21 @@ export default function HomePage() {
   }
 
   return (
-    <div style={{ display: 'grid', gap: 12 }}>
+    <div style={{ display: 'grid', gap: 12, minWidth: 0 }}>
       {error ? (
         <div className="card" style={{ padding: 12, color: 'var(--danger)' }}>
           {error}
         </div>
       ) : null}
 
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
+      <style>{`
+        .uc-home-summary { display:grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap:12px; min-width:0; }
+        @media (max-width: 720px){
+          .uc-home-summary { grid-template-columns: 1fr; }
+        }
+      `}</style>
+
+      <section className="uc-home-summary">
         <div className="card" style={{ padding: 12 }}>
           <div style={{ opacity: 0.7, fontSize: 12, marginBottom: 8 }}>Fases</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -377,7 +384,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="card" style={{ padding: 12 }}>
+      <section className="card" style={{ padding: 12, minWidth: 0, overflowX: 'hidden' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
           <div style={{ fontWeight: 800 }}>{timelineTitle}</div>
           <div style={{ opacity: 0.7, fontSize: 12 }}>{v?.activeCode ? `Código: ${v.activeCode}` : ''}</div>
