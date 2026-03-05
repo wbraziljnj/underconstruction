@@ -276,6 +276,7 @@ export default function FasesPage() {
   });
 
   const selectedFase = form.watch('fase');
+  const cellPad = { padding: '12px 10px' } as const;
 
   function openEditModal(row: any) {
     setMode('edit');
@@ -394,14 +395,14 @@ export default function FasesPage() {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ textAlign: 'left', opacity: 0.8 }}>
-              <th style={{ padding: 10 }}>Fase</th>
-              <th style={{ padding: 10 }}>Subfase</th>
-              <th style={{ padding: 10 }}>Início</th>
-              <th style={{ padding: 10 }}>Previsão</th>
-              <th style={{ padding: 10 }}>Finalização</th>
-              <th style={{ padding: 10 }}>Responsável</th>
-              <th style={{ padding: 10 }}>Status</th>
-              <th style={{ padding: 10 }}>Valor Atual</th>
+              <th style={cellPad}>Fase</th>
+              <th style={cellPad}>Subfase</th>
+              <th style={cellPad}>Início</th>
+              <th style={cellPad}>Previsão</th>
+              <th style={cellPad}>Finalização</th>
+              <th style={cellPad}>Responsável</th>
+              <th style={cellPad}>Status</th>
+              <th style={cellPad}>Valor Atual</th>
             </tr>
           </thead>
           <tbody>
@@ -433,14 +434,14 @@ export default function FasesPage() {
                     setDetailsOpen(true);
                   }}
                 >
-                  <td style={{ padding: 10 }}>{r.fase}</td>
-                  <td style={{ padding: 10, opacity: 0.8 }}>{r.subfase || '-'}</td>
-                  <td style={{ padding: 10 }}>{formatBrDate(r.dataInicio)}</td>
-                  <td style={{ padding: 10 }}>{formatBrDate(r.previsaoFinalizacao)}</td>
-                  <td style={{ padding: 10 }}>{r.dataFinalizacao ? formatBrDate(r.dataFinalizacao) : '-'}</td>
-                  <td style={{ padding: 10 }}>{r.responsavelNome || '-'}</td>
-                  <td style={{ padding: 10, color: statusColor(r.status), fontWeight: 600 }}>{r.status}</td>
-                  <td style={{ padding: 10 }}>{r.valorAtual ?? '-'}</td>
+                  <td style={cellPad}>{r.fase}</td>
+                  <td style={{ ...cellPad, opacity: 0.8 }}>{r.subfase || '-'}</td>
+                  <td style={cellPad}>{formatBrDate(r.dataInicio)}</td>
+                  <td style={cellPad}>{formatBrDate(r.previsaoFinalizacao)}</td>
+                  <td style={cellPad}>{r.dataFinalizacao ? formatBrDate(r.dataFinalizacao) : '-'}</td>
+                  <td style={cellPad}>{r.responsavelNome || '-'}</td>
+                  <td style={{ ...cellPad, color: statusColor(r.status), fontWeight: 600 }}>{r.status}</td>
+                  <td style={cellPad}>{r.valorAtual ?? '-'}</td>
                 </tr>
               ))
             )}

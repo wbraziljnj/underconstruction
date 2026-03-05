@@ -329,6 +329,7 @@ export default function DocumentacoesPage() {
     () => [...users].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')),
     [users]
   );
+  const cellPad = { padding: '12px 10px' } as const;
 
   useEffect(() => {
     if (!open) return;
@@ -491,15 +492,15 @@ export default function DocumentacoesPage() {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ textAlign: 'left', opacity: 0.8 }}>
-              <th style={{ padding: 10 }}>Documento</th>
-              <th style={{ padding: 10 }}>Fase</th>
-              <th style={{ padding: 10 }}>Subfase</th>
-              <th style={{ padding: 10 }}>Fatura</th>
-              <th style={{ padding: 10 }}>Status</th>
-              <th style={{ padding: 10 }}>Responsável</th>
-              <th style={{ padding: 10 }}>Inclusão</th>
-              <th style={{ padding: 10 }}>Entrega</th>
-              <th style={{ padding: 10 }}>Arquivo</th>
+              <th style={cellPad}>Documento</th>
+              <th style={cellPad}>Fase</th>
+              <th style={cellPad}>Subfase</th>
+              <th style={cellPad}>Fatura</th>
+              <th style={cellPad}>Status</th>
+              <th style={cellPad}>Responsável</th>
+              <th style={cellPad}>Inclusão</th>
+              <th style={cellPad}>Entrega</th>
+              <th style={cellPad}>Arquivo</th>
             </tr>
           </thead>
           <tbody>
@@ -528,17 +529,17 @@ export default function DocumentacoesPage() {
                   style={{ borderTop: '1px solid var(--border)' }}
                   onClick={() => openDetails(r)}
                 >
-                  <td style={{ padding: 10 }}>{r.documento}</td>
-                  <td style={{ padding: 10, opacity: 0.85 }}>{r.fase}</td>
-                  <td style={{ padding: 10, opacity: 0.85 }}>{r.subfase || '-'}</td>
-                  <td style={{ padding: 10 }}>
+                  <td style={cellPad}>{r.documento}</td>
+                  <td style={{ ...cellPad, opacity: 0.85 }}>{r.fase}</td>
+                  <td style={{ ...cellPad, opacity: 0.85 }}>{r.subfase || '-'}</td>
+                  <td style={cellPad}>
                     {r.faturaDescricao || (r.faturaId ? `#${r.faturaId}` : '-')}
                   </td>
-                  <td style={{ padding: 10, color: statusColor(r.status) }}>{r.status}</td>
-                  <td style={{ padding: 10 }}>{r.responsavelNome || '-'}</td>
-                  <td style={{ padding: 10 }}>{formatBrDate(r.dataInclusao)}</td>
-                  <td style={{ padding: 10 }}>{formatBrDate(r.dataEntrega)}</td>
-                  <td style={{ padding: 10 }}>
+                  <td style={{ ...cellPad, color: statusColor(r.status) }}>{r.status}</td>
+                  <td style={cellPad}>{r.responsavelNome || '-'}</td>
+                  <td style={cellPad}>{formatBrDate(r.dataInclusao)}</td>
+                  <td style={cellPad}>{formatBrDate(r.dataEntrega)}</td>
+                  <td style={cellPad}>
                     {r.arquivoUrl ? (
                       <a href={r.arquivoUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
                         Abrir

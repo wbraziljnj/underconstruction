@@ -194,6 +194,7 @@ export default function FaturaPage() {
 
   const valor = form.watch('valor');
   const quantidade = form.watch('quantidade');
+  const cellPad = { padding: '12px 10px' } as const;
 
   function openEditModal(row: any) {
     setMode('edit');
@@ -323,14 +324,14 @@ export default function FaturaPage() {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ textAlign: 'left', opacity: 0.8 }}>
-              <th style={{ padding: 10 }}>Descrição</th>
-              <th style={{ padding: 10 }}>Fase</th>
-              <th style={{ padding: 10 }}>Data</th>
-              <th style={{ padding: 10 }}>Quantidade</th>
-              <th style={{ padding: 10 }}>Valor</th>
-              <th style={{ padding: 10 }}>Total</th>
-              <th style={{ padding: 10 }}>Pagamento</th>
-              <th style={{ padding: 10 }}>Comprovante</th>
+              <th style={cellPad}>Descrição</th>
+              <th style={cellPad}>Fase</th>
+              <th style={cellPad}>Data</th>
+              <th style={cellPad}>Quantidade</th>
+              <th style={cellPad}>Valor</th>
+              <th style={cellPad}>Total</th>
+              <th style={cellPad}>Pagamento</th>
+              <th style={cellPad}>Comprovante</th>
             </tr>
           </thead>
           <tbody>
@@ -362,14 +363,14 @@ export default function FaturaPage() {
                     setDetailsOpen(true);
                   }}
                 >
-                  <td style={{ padding: 10 }}>{r.fatura}</td>
-                  <td style={{ padding: 10, opacity: 0.7, fontSize: 12 }}>{r.faseNome || '-'}</td>
-                  <td style={{ padding: 10 }}>{formatBrDate(r.data)}</td>
-                  <td style={{ padding: 10 }}>{r.quantidade}</td>
-                  <td style={{ padding: 10 }}>{r.valor}</td>
-                  <td style={{ padding: 10 }}>{r.total}</td>
-                  <td style={{ padding: 10, color: pagamentoColor(r.pagamento), fontWeight: 600 }}>{r.pagamento}</td>
-                  <td style={{ padding: 10 }}>
+                  <td style={cellPad}>{r.fatura}</td>
+                  <td style={{ ...cellPad, opacity: 0.7, fontSize: 12 }}>{r.faseNome || '-'}</td>
+                  <td style={cellPad}>{formatBrDate(r.data)}</td>
+                  <td style={cellPad}>{r.quantidade}</td>
+                  <td style={cellPad}>{r.valor}</td>
+                  <td style={cellPad}>{r.total}</td>
+                  <td style={{ ...cellPad, color: pagamentoColor(r.pagamento), fontWeight: 600 }}>{r.pagamento}</td>
+                  <td style={cellPad}>
                     {r.comprovanteUrl ? (
                       <a
                         href={r.comprovanteUrl}
