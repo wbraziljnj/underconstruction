@@ -319,7 +319,10 @@ export default function CadastrosPage() {
                     <b>Email:</b> <span style={{ wordBreak: 'break-word' }}>{r.email || '—'}</span>
                   </div>
                   <div className="uc-user-field">
-                    <b>Status:</b> <span>{r.status || '—'}</span>
+                    <b>Status:</b>{' '}
+                    <span style={{ color: String(r.status || '').toUpperCase() === 'ATIVO' ? '#2f9e44' : String(r.status || '').toUpperCase() === 'INATIVO' ? '#d64545' : 'inherit', fontWeight: 800 }}>
+                      {r.status || '—'}
+                    </span>
                   </div>
                   <div className="uc-user-field">
                     <b>Notas:</b> <span style={{ wordBreak: 'break-word' }}>{r.notas || '—'}</span>
