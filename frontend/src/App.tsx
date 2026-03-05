@@ -8,6 +8,7 @@ import CadastrosPage from './pages/CadastrosPage';
 import FasesPage from './pages/FasesPage';
 import FaturaPage from './pages/FaturaPage';
 import DocumentacoesPage from './pages/DocumentacoesPage';
+import FirstAccessPage from './pages/FirstAccessPage';
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -22,7 +23,11 @@ export default function App() {
       <Route path="/" element={<Navigate to={user ? '/home' : '/login'} replace />} />
 
       <Route element={user ? <AppShell /> : <Navigate to="/login" replace />}>
-        <Route path="/home" element={<HomePage />} />
+        <Route
+          path="/primeiro-acesso"
+          element={user?.mustChangePassword ? <FirstAccessPage /> : <Navigate to="/home" replace />}
+        />
+        <Route path="/home" element={user?.mustChangePassword ? <Navigate to="/primeiro-acesso" replace /> : <HomePage />} />
         <Route path="/obra" element={<ObraPage />} />
         <Route path="/cadastros" element={<CadastrosPage />} />
         <Route path="/fases" element={<FasesPage />} />

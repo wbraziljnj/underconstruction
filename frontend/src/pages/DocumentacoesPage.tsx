@@ -376,7 +376,7 @@ export default function DocumentacoesPage() {
         setOptionsError(null);
         const u = await apiFetch<UserOption[]>('/cadastros/options', { method: 'GET' });
         if (!alive) return;
-        setUsers((u || []).filter((x) => x.tipoUsuario !== 'Owner'));
+        setUsers(u || []);
       } catch (e) {
         if (!alive) return;
         setOptionsError(e instanceof Error ? e.message : 'Falha ao carregar usuários');

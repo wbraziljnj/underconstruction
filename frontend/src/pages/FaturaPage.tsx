@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { apiFetch } from '../api/client';
 import { useEffect } from 'react';
 import { useAuth } from '../auth/auth';
+import { FASES_FIXAS } from '../ui/fasesFixas';
 
 const schema = z
   .object({
@@ -19,6 +20,8 @@ const schema = z
     valor: z.coerce.number().nonnegative('Valor inválido'),
     quantidade: z.coerce.number().int('Quantidade inválida').nonnegative('Quantidade inválida'),
     descricao: z.string().min(1, 'Fatura obrigatória'),
+    subfase: z.string().min(1, 'Subfase obrigatória'),
+    notas: z.string().optional(),
     total: z.coerce.number().nonnegative('Total inválido'),
     fase_id: z.string().min(1, 'Fase ID obrigatório'),
     responsavel_id: z.string().optional(),
@@ -37,7 +40,7 @@ const schema = z
 type FormValues = z.infer<typeof schema>;
 
 type UserOption = { userId: string; nome: string; tipoUsuario: string; status: string };
-type FaseOption = { faseId: string; fase: string };
+type FaseOption = { faseId: string; fase: string; subfase?: string | null };
 
 function formatBrDate(value?: string) {
   if (!value) return '';
@@ -110,6 +113,7 @@ export default function FaturaPage() {
   const [saving, setSaving] = useState(false);
   const [users, setUsers] = useState<UserOption[]>([]);
   const [fases, setFases] = useState<FaseOption[]>([]);
+  const [faseNome, setFaseNome] = useState('');
   const [optionsError, setOptionsError] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
@@ -127,6 +131,14 @@ export default function FaturaPage() {
     [fases]
   );
 
+  const faseOptions = useMemo(() => FASES_FIXAS.map((x) => x.fase), []);
+
+  const subfaseOptions = useMemo(() => {
+    const phase = faseNome.trim();
+    const found = FASES_FIXAS.find((x) => x.fase === phase);
+    return found ? found.subfases : [];
+  }, [faseNome]);
+
   const defaults = useMemo<FormValues>(
     () => ({
       data: '',
@@ -139,6 +151,8 @@ export default function FaturaPage() {
       valor: 0,
       quantidade: 1,
       descricao: '',
+      subfase: '',
+      notas: '',
       total: 0,
       fase_id: '',
       responsavel_id: '',
@@ -187,7 +201,7 @@ export default function FaturaPage() {
           apiFetch<FaseOption[]>('/fases/options', { method: 'GET' })
         ]);
         if (!alive) return;
-        setUsers((u || []).filter((x) => x.tipoUsuario !== 'Owner'));
+        setUsers(u || []);
         setFases(f);
       } catch (e) {
         if (!alive) return;
@@ -212,6 +226,7 @@ export default function FaturaPage() {
           onClick={() => {
             setMode('create');
             setEditingRow(null);
+            setFaseNome('');
             form.reset(defaults);
             // recalcula total no front só para UX (backend vai recalcular depois)
             form.setValue('total', (Number(valor) || 0) * (Number(quantidade) || 0), { shouldValidate: true });
@@ -239,7 +254,7 @@ export default function FaturaPage() {
           <option value="">Fase (todas)</option>
           {sortedFases.map((f) => (
             <option key={f.faseId} value={f.faseId}>
-              {f.fase}
+              {f.subfase ? `${f.fase} • ${f.subfase}` : f.fase}
             </option>
           ))}
         </select>
@@ -300,6 +315,7 @@ export default function FaturaPage() {
                       onClick={() => {
                         setMode('edit');
                         setEditingRow(r);
+                        setFaseNome(String(r.faseNome || ''));
                         form.reset({
                           descricao: r.fatura || '',
                           data: toDateOnlyLocal(r.data),
@@ -307,12 +323,14 @@ export default function FaturaPage() {
                           data_pagamento: toDateOnlyLocal(r.dataPagamento),
                           dados_pagamento: r.dadosPagamento || '',
                           nfe: r.nfe || '',
+                          notas: r.notas || '',
                           status: r.status || 'ATIVO',
                           pagamento: r.pagamento || 'aberto',
                           valor: Number(r.valor || 0),
                           quantidade: Number(r.quantidade || 0),
                           total: Number(r.total || 0),
                           fase_id: String(r.faseId ?? ''),
+                          subfase: r.subfase || '',
                           responsavel_id: r.responsavelId ? String(r.responsavelId) : '',
                           empresa_id: r.empresaId ? String(r.empresaId) : ''
                         });
@@ -458,20 +476,68 @@ export default function FaturaPage() {
             <input className="input" placeholder="Código de barras / linha digitável" {...form.register('nfe')} />
           </label>
 
+          <label style={{ gridColumn: '1 / -1' }}>
+            <div style={{ fontSize: 12, opacity: 0.8 }}>Notas</div>
+            <textarea className="input" rows={3} {...form.register('notas')} />
+          </label>
+
           <input type="hidden" {...form.register('status')} />
 
           <label>
             <div style={{ fontSize: 12, opacity: 0.8 }}>Fase</div>
-            <select className="input" {...form.register('fase_id')} defaultValue="">
+            <select
+              className="input"
+              value={faseNome}
+              onChange={(e) => {
+                const next = e.target.value;
+                setFaseNome(next);
+                const found = FASES_FIXAS.find((x) => x.fase === next);
+                const firstSub = found?.subfases?.[0] || '';
+                form.setValue('subfase', firstSub, { shouldValidate: true });
+                const match = sortedFases.find(
+                  (x) => (x.fase || '').trim() === next && String(x.subfase || '').trim() === firstSub
+                );
+                form.setValue('fase_id', match?.faseId ? String(match.faseId) : '', { shouldValidate: true });
+              }}
+            >
               <option value="">Selecione...</option>
-              {sortedFases.map((f) => (
-                <option key={f.faseId} value={f.faseId}>
-                  {f.fase}
+              {faseOptions.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            <div style={{ fontSize: 12, opacity: 0.8 }}>Subfase</div>
+            <select
+              className="input"
+              {...form.register('subfase')}
+              disabled={!faseNome}
+              onChange={(e) => {
+                const sub = e.target.value;
+                form.setValue('subfase', sub, { shouldValidate: true });
+                const match = sortedFases.find(
+                  (x) => (x.fase || '').trim() === faseNome.trim() && String(x.subfase || '').trim() === sub.trim()
+                );
+                form.setValue('fase_id', match?.faseId ? String(match.faseId) : '', { shouldValidate: true });
+              }}
+            >
+              <option value="">Selecione...</option>
+              {subfaseOptions.map((s) => (
+                <option key={s} value={s}>
+                  {s}
                 </option>
               ))}
             </select>
             {form.formState.errors.fase_id && (
-              <div style={{ color: 'var(--danger)', fontSize: 12 }}>{form.formState.errors.fase_id.message}</div>
+              <div style={{ color: 'var(--danger)', fontSize: 12 }}>
+                {form.formState.errors.fase_id.message} (cadastre esta fase em <b>Fases</b>)
+              </div>
+            )}
+            {form.formState.errors.subfase && (
+              <div style={{ color: 'var(--danger)', fontSize: 12 }}>{form.formState.errors.subfase.message}</div>
             )}
           </label>
 

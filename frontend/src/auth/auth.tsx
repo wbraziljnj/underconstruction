@@ -8,6 +8,7 @@ export type AuthUser = {
   tipoUsuario: string;
   codes: string[];
   activeCode: string | null;
+  mustChangePassword?: boolean;
 };
 
 type AuthContextValue = {

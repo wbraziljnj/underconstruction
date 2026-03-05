@@ -124,8 +124,7 @@ export default function ObraPage() {
           { method: 'GET' }
         );
         if (!alive) return;
-        // Remove Owner das opções; mantém demais perfis elegíveis.
-        setUsers((u || []).filter((x) => x.tipoUsuario !== 'Owner'));
+        setUsers(u || []);
       } catch (e) {
         if (!alive) return;
         setOptionsError(e instanceof Error ? e.message : 'Falha ao carregar usuários');
@@ -137,7 +136,7 @@ export default function ObraPage() {
   }, [open, user?.activeCode]);
 
   const responsaveis = useMemo(() => users, [users]);
-  const engenheiros = useMemo(() => users.filter((u) => u.tipoUsuario === 'Engenheiro'), [users]);
+  const engenheiros = useMemo(() => users, [users]);
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
