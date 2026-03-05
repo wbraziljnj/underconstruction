@@ -92,7 +92,7 @@ export function Sidebar({
               }}
             />
           </span>
-          {!collapsed ? <span>Tema</span> : null}
+          {!collapsed ? <span>Under Construction</span> : null}
         </button>
 
         <button
