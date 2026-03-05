@@ -30,6 +30,7 @@ type TimelineItem = {
   faseId: string;
   fase: string;
   subfase: string | null;
+  notas?: string | null;
   status: 'ABERTO' | 'ANDAMENTO' | 'PENDENTE' | 'FINALIZADO' | string;
   dataInicio: string;
   previsaoFinalizacao: string;
@@ -463,6 +464,8 @@ export default function HomePage() {
                           </div>
                         </div>
                       </div>
+
+                      {t.notas ? <div className="uc-tl-sub">{t.notas}</div> : null}
 
                       <div className="uc-tl-body">
                         <span className="uc-chip">🧾 {t.faturasCount} faturas</span>

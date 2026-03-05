@@ -1193,7 +1193,7 @@ if ($relativePath === '/home/timeline' && $method === 'GET') {
     require_authenticated_user_id();
     $code = require_active_obra_codigo();
 
-    $sql = 'SELECT f.fase_id, f.fase, f.subfase, f.status, f.data_inicio, f.previsao_finalizacao, f.data_finalizacao,
+    $sql = 'SELECT f.fase_id, f.fase, f.subfase, f.notas, f.status, f.data_inicio, f.previsao_finalizacao, f.data_finalizacao,
                    f.responsavel_id, u.nome AS responsavel_nome,
                    COUNT(DISTINCT ft.fatura_id) AS faturas_count,
                    COUNT(DISTINCT d.docs_id) AS docs_count
@@ -1202,7 +1202,7 @@ if ($relativePath === '/home/timeline' && $method === 'GET') {
             LEFT JOIN uc_faturas ft ON ft.fase_id = f.fase_id AND ' . uc_code_predicate_for_table('uc_faturas', 'ft.code') . '
             LEFT JOIN uc_documentacoes d ON (d.fase COLLATE utf8mb4_unicode_ci) = (f.fase COLLATE utf8mb4_unicode_ci) AND ' . uc_code_predicate_for_table('uc_documentacoes', 'd.code') . '
             WHERE ' . uc_code_predicate_for_table('uc_fases', 'f.code') . '
-            GROUP BY f.fase_id, f.fase, f.subfase, f.status, f.data_inicio, f.previsao_finalizacao, f.data_finalizacao, f.responsavel_id, u.nome
+            GROUP BY f.fase_id, f.fase, f.subfase, f.notas, f.status, f.data_inicio, f.previsao_finalizacao, f.data_finalizacao, f.responsavel_id, u.nome
             ORDER BY
                 CAST(SUBSTRING_INDEX(f.fase, " ", 1) AS UNSIGNED) DESC,
                 CAST(SUBSTRING_INDEX(COALESCE(f.subfase, ""), ".", 1) AS UNSIGNED) DESC,
@@ -1222,6 +1222,7 @@ if ($relativePath === '/home/timeline' && $method === 'GET') {
         'faseId' => (string)$r['fase_id'],
         'fase' => (string)$r['fase'],
         'subfase' => $r['subfase'] !== null ? (string)$r['subfase'] : null,
+        'notas' => $r['notas'] !== null ? (string)$r['notas'] : null,
         'status' => (string)($r['status'] ?? ''),
         'dataInicio' => (string)$r['data_inicio'],
         'previsaoFinalizacao' => (string)$r['previsao_finalizacao'],
