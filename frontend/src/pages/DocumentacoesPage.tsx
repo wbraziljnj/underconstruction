@@ -13,12 +13,12 @@ type Documento = {
   documento: string;
   fase: string;
   subfase: string | null;
-  valor: string;
+  faturaId: string | null;
+  faturaDescricao?: string | null;
   dadosPagamento: string | null;
   dataInclusao: string;
   dataEntrega: string | null;
   status: 'ABERTO' | 'ANDAMENTO' | 'PENDENTE' | 'FINALIZADO';
-  pagamentoStatus: string;
   tipoAssinatura?: string | null;
   responsavelId: string | null;
   responsavelNome: string | null;
@@ -32,6 +32,7 @@ type Documento = {
 };
 
 type UserOption = { userId: string; nome: string; tipoUsuario: string; status: string };
+type FaturaOption = { faturaId: string; label: string };
 
 const DOC_STATUS = ['ABERTO', 'ANDAMENTO', 'PENDENTE', 'FINALIZADO'] as const;
 const PHASES: { fase: string; subfases: string[] }[] = [
@@ -232,25 +233,19 @@ function statusColor(status: string) {
   return 'inherit';
 }
 
-function paymentColor(status: string) {
-  const s = status.toUpperCase();
-  if (s === 'ABERTO') return '#d4a000';
-  if (s === 'PENDENTE') return '#d64545';
-  if (s === 'PAGO') return '#2f9e44';
-  return 'inherit';
-}
-
 const schema = z.object({
   documento: z.string().min(1, 'Documento obrigatório'),
   fase: z.string().min(1, 'Fase obrigatória'),
   subfase: z.string().min(1, 'Subfase obrigatória'),
-  valor: z.coerce.number().nonnegative('Valor inválido'),
+  fatura: z
+    .string()
+    .optional()
+    .refine((v) => !v || v === '' || /^\d+$/.test(v), 'Fatura inválida'),
   dados_pagamento: z.string().optional(),
   data_inclusao: z.string().optional(),
   data_entrega: z.string().optional(),
   status: z.enum(DOC_STATUS),
   responsavel_id: z.string().min(1, 'Responsável obrigatório'),
-  pagamento_status: z.enum(['ABERTO', 'PENDENTE', 'PAGO']),
   tipo_assinatura: z.enum(['Sem Assinatura', 'Assinatura Digital', 'Assinatura Gov', 'Assinatura Cartorio']),
   assinatura: z.string().min(1, 'Assinatura obrigatória'),
   notas: z.string().optional(),
@@ -297,6 +292,7 @@ export default function DocumentacoesPage() {
 
   const [users, setUsers] = useState<UserOption[]>([]);
   const [optionsError, setOptionsError] = useState<string | null>(null);
+  const [faturas, setFaturas] = useState<FaturaOption[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [subfasesOptions, setSubfasesOptions] = useState<string[]>([]);
 
@@ -310,13 +306,12 @@ export default function DocumentacoesPage() {
       documento: '',
       fase: '',
       subfase: '',
-      valor: 0,
+      fatura: '',
       dados_pagamento: '',
       data_inclusao: new Date().toISOString().slice(0, 10),
       data_entrega: '',
       status: 'ABERTO',
       responsavel_id: '',
-      pagamento_status: 'PENDENTE',
       tipo_assinatura: 'Sem Assinatura',
       assinatura: '',
       notas: '',
@@ -374,9 +369,21 @@ export default function DocumentacoesPage() {
     (async () => {
       try {
         setOptionsError(null);
-        const u = await apiFetch<UserOption[]>('/cadastros/options', { method: 'GET' });
+        const [u, f] = await Promise.all([
+          apiFetch<UserOption[]>('/cadastros/options', { method: 'GET' }),
+          apiFetch<{ items: any[] }>('/faturas', { method: 'GET' }).catch(() => ({ items: [] }))
+        ]);
         if (!alive) return;
         setUsers(u || []);
+        const opts: FaturaOption[] = (f.items || []).map((it: any) => {
+          const id = String(it.faturaId || it.fatura_id || it.id || '');
+          const desc = String(it.fatura || it.descricao || '').trim();
+          const fase = String(it.faseNome || it.fase || '').trim();
+          const labelBase = desc || `Fatura #${id}`;
+          const label = fase ? `${labelBase} — ${fase}` : labelBase;
+          return { faturaId: id, label };
+        }).filter((it: FaturaOption) => it.faturaId);
+        setFaturas(opts.sort((a, b) => a.label.localeCompare(b.label, 'pt-BR')));
       } catch (e) {
         if (!alive) return;
         setOptionsError(e instanceof Error ? e.message : 'Falha ao carregar usuários');
@@ -409,13 +416,12 @@ export default function DocumentacoesPage() {
       documento: row.documento,
       fase: row.fase,
       subfase: row.subfase || '',
-      valor: Number(row.valor || 0),
+      fatura: row.faturaId || '',
       dados_pagamento: row.dadosPagamento || '',
       data_inclusao: row.dataInclusao ? row.dataInclusao.slice(0, 10) : '',
       data_entrega: row.dataEntrega ? row.dataEntrega.slice(0, 10) : '',
       status: row.status,
       responsavel_id: row.responsavelId || '',
-      pagamento_status: row.pagamentoStatus || 'PENDENTE',
       tipo_assinatura: row.tipoAssinatura || 'Sem Assinatura',
       assinatura: row.assinatura || '',
       notas: row.notas || '',
@@ -480,8 +486,7 @@ export default function DocumentacoesPage() {
               <th style={{ padding: 10 }}>Documento</th>
               <th style={{ padding: 10 }}>Fase</th>
               <th style={{ padding: 10 }}>Subfase</th>
-              <th style={{ padding: 10 }}>Valor</th>
-              <th style={{ padding: 10 }}>Pagamento</th>
+              <th style={{ padding: 10 }}>Fatura</th>
               <th style={{ padding: 10 }}>Status</th>
               <th style={{ padding: 10 }}>Responsável</th>
               <th style={{ padding: 10 }}>Inclusão</th>
@@ -516,10 +521,7 @@ export default function DocumentacoesPage() {
                   <td style={{ padding: 10, opacity: 0.85 }}>{r.fase}</td>
                   <td style={{ padding: 10, opacity: 0.85 }}>{r.subfase || '-'}</td>
                   <td style={{ padding: 10 }}>
-                    {Number(r.valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                  </td>
-                  <td style={{ padding: 10, color: paymentColor(r.pagamentoStatus || '') }}>
-                    {r.pagamentoStatus || '-'}
+                    {r.faturaDescricao || (r.faturaId ? `#${r.faturaId}` : '-')}
                   </td>
                   <td style={{ padding: 10, color: statusColor(r.status) }}>{r.status}</td>
                   <td style={{ padding: 10 }}>{r.responsavelNome || '-'}</td>
@@ -625,9 +627,8 @@ export default function DocumentacoesPage() {
 
                   const payload = {
                     ...values,
-                    pagamento_status: values.pagamento_status || 'PENDENTE',
-                  tipo_assinatura: values.tipo_assinatura || 'Sem Assinatura',
-                  assinatura: values.assinatura || '',
+                    tipo_assinatura: values.tipo_assinatura || 'Sem Assinatura',
+                    assinatura: values.assinatura || '',
                     arquivo_path: arquivoPath || undefined,
                     password
                   };
@@ -717,11 +718,6 @@ export default function DocumentacoesPage() {
           </label>
 
           <label>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>Valor</div>
-            <input className="input" type="number" step="0.01" {...form.register('valor')} />
-          </label>
-
-          <label>
             <div style={{ fontSize: 12, opacity: 0.8 }}>Status</div>
             <select className="input" {...form.register('status')}>
               <option value="ABERTO">Aberto</option>
@@ -732,16 +728,31 @@ export default function DocumentacoesPage() {
           </label>
 
           <label>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>Pagamento status</div>
-            <select className="input" {...form.register('pagamento_status')}>
-              <option value="ABERTO">Aberto</option>
-              <option value="PENDENTE">Pendente</option>
-              <option value="PAGO">Pago</option>
-            </select>
-            {form.formState.errors.pagamento_status ? (
-              <div style={{ color: 'var(--danger)', fontSize: 12 }}>
-                {form.formState.errors.pagamento_status.message}
-              </div>
+            <div style={{ fontSize: 12, opacity: 0.8 }}>Fatura</div>
+            {(() => {
+              const reg = form.register('fatura');
+              const value = form.watch('fatura') || '';
+              return (
+                <select
+                  className="input"
+                  {...reg}
+                  value={value}
+                  onChange={(e) => {
+                    reg.onChange(e);
+                    form.setValue('fatura', e.target.value, { shouldValidate: true });
+                  }}
+                >
+                  <option value="">Sem fatura</option>
+                  {faturas.map((ft) => (
+                    <option key={ft.faturaId} value={ft.faturaId}>
+                      {ft.label}
+                    </option>
+                  ))}
+                </select>
+              );
+            })()}
+            {form.formState.errors.fatura ? (
+              <div style={{ color: 'var(--danger)', fontSize: 12 }}>{String(form.formState.errors.fatura.message)}</div>
             ) : null}
           </label>
 

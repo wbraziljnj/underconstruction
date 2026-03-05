@@ -1055,8 +1055,6 @@ if ($relativePath === '/fases' && $method === 'GET') {
                    u.nome AS responsavel_nome,
                    (
                      COALESCE((SELECT SUM(ft.total) FROM uc_faturas ft WHERE ft.fase_id = f.fase_id AND ' . uc_code_predicate_for_table('uc_faturas', 'ft.code') . '), 0)
-                     +
-                     COALESCE((SELECT SUM(d.valor) FROM uc_documentacoes d WHERE (d.fase COLLATE utf8mb4_unicode_ci) = (f.fase COLLATE utf8mb4_unicode_ci) AND ' . uc_code_predicate_for_table('uc_documentacoes', 'd.code') . '), 0)
                    ) AS valor_atual
             FROM uc_fases f
             LEFT JOIN uc_users u ON u.user_id = f.responsavel_id
@@ -1244,14 +1242,16 @@ if ($relativePath === '/documentacoes' && $method === 'GET') {
     $fase = trim((string)($_GET['fase'] ?? ''));
     $subfase = trim((string)($_GET['subfase'] ?? ''));
 
-    $sql = 'SELECT d.docs_id, d.documento, d.fase, d.subfase, d.valor, d.dados_pagamento, d.data_inclusao, d.data_entrega,
-                   d.status, d.pagamento_status, d.tipo_assinatura, d.assinatura, d.responsavel_id, d.notas, d.arquivo_path, d.created_at, d.updated_at,
-                   u.nome AS responsavel_nome, ua.nome AS assinatura_nome
+    $sql = 'SELECT d.docs_id, d.documento, d.fase, d.subfase, d.fatura, d.dados_pagamento, d.data_inclusao, d.data_entrega,
+                   d.status, d.tipo_assinatura, d.assinatura, d.responsavel_id, d.notas, d.arquivo_path, d.created_at, d.updated_at,
+                   u.nome AS responsavel_nome, ua.nome AS assinatura_nome,
+                   ft.descricao AS fatura_descricao
             FROM uc_documentacoes d
             LEFT JOIN uc_users u ON u.user_id = d.responsavel_id
             LEFT JOIN uc_users ua ON ua.user_id = d.assinatura
+            LEFT JOIN uc_faturas ft ON ft.fatura_id = d.fatura AND ' . uc_code_predicate_for_table('uc_faturas', 'ft.code') . '
             WHERE ' . uc_code_predicate_for_table('uc_documentacoes', 'd.code');
-    $params = [$code];
+    $params = [$code, $code];
 
     if ($q !== '') {
         $sql .= ' AND (LOWER(d.documento) LIKE ? OR LOWER(d.fase) LIKE ? OR LOWER(d.subfase) LIKE ? OR LOWER(u.nome) LIKE ?)';
@@ -1286,12 +1286,12 @@ if ($relativePath === '/documentacoes' && $method === 'GET') {
         'documento' => (string)$r['documento'],
         'fase' => (string)$r['fase'],
         'subfase' => (string)$r['subfase'],
-        'valor' => (string)$r['valor'],
+        'faturaId' => $r['fatura'] !== null ? (string)$r['fatura'] : null,
+        'faturaDescricao' => $r['fatura_descricao'] !== null ? (string)$r['fatura_descricao'] : null,
         'dadosPagamento' => $r['dados_pagamento'] !== null ? (string)$r['dados_pagamento'] : null,
         'dataInclusao' => (string)$r['data_inclusao'],
         'dataEntrega' => $r['data_entrega'] !== null ? (string)$r['data_entrega'] : null,
         'status' => (string)$r['status'],
-        'pagamentoStatus' => (string)$r['pagamento_status'],
         'tipoAssinatura' => (string)$r['tipo_assinatura'],
         'assinatura' => (string)$r['assinatura'],
         'assinaturaNome' => $r['assinatura_nome'] !== null ? (string)$r['assinatura_nome'] : null,
@@ -1332,9 +1332,26 @@ if ($relativePath === '/documentacoes' && $method === 'POST') {
         fail_validation('status', 'Status inválido');
     }
 
-    $pagamentoStatus = trim((string)($payload['pagamento_status'] ?? ($payload['pagamentoStatus'] ?? '')));
-    if ($pagamentoStatus === '') {
-        $pagamentoStatus = 'PENDENTE';
+    $faturaRawMixed = $payload['fatura'] ?? ($payload['faturaId'] ?? ($payload['fatura_id'] ?? null));
+    $faturaRaw = is_int($faturaRawMixed) ? (string)$faturaRawMixed : optional_string($faturaRawMixed);
+    $faturaId = null;
+    if (is_string($faturaRaw) && $faturaRaw !== '') {
+        if (!ctype_digit($faturaRaw)) {
+            fail_validation('fatura', 'Fatura inválida');
+        }
+        $faturaId = (int)$faturaRaw;
+        if ($faturaId <= 0) {
+            $faturaId = null;
+        }
+        if ($faturaId !== null) {
+            $exists = fetch_one(
+                'SELECT fatura_id FROM uc_faturas WHERE fatura_id = ? AND ' . uc_code_predicate_for_table('uc_faturas', 'code') . ' LIMIT 1',
+                [$faturaId, $code]
+            );
+            if (!$exists) {
+                fail_validation('fatura', 'Fatura não encontrada');
+            }
+        }
     }
 
     $tipoAssinatura = trim((string)($payload['tipo_assinatura'] ?? ($payload['tipoAssinatura'] ?? '')));
@@ -1347,7 +1364,6 @@ if ($relativePath === '/documentacoes' && $method === 'POST') {
         fail_validation('assinatura', 'Assinatura obrigatória');
     }
 
-    $valor = normalize_decimal($payload['valor'] ?? null, 'valor', 2, true);
     $dadosPagamento = optional_string($payload['dados_pagamento'] ?? ($payload['dadosPagamento'] ?? null));
     // `uc_documentacoes.notas` no banco está NOT NULL.
     $notas = optional_string($payload['notas'] ?? '') ?? '';
@@ -1368,19 +1384,18 @@ if ($relativePath === '/documentacoes' && $method === 'POST') {
     $now = now_datetime_ms();
     $pdo = Database::connection();
     try {
-    $stmt = $pdo->prepare('INSERT INTO uc_documentacoes (documento, fase, subfase, valor, dados_pagamento, data_inclusao, data_entrega, status, pagamento_status, tipo_assinatura, assinatura, responsavel_id, notas, arquivo_path, created_at, updated_at, code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        $stmt = $pdo->prepare('INSERT INTO uc_documentacoes (documento, fase, subfase, fatura, dados_pagamento, data_inclusao, data_entrega, status, tipo_assinatura, assinatura, responsavel_id, notas, arquivo_path, created_at, updated_at, code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         $stmt->execute([
             $documento,
             $fase,
             $subfase,
-            $valor,
+            $faturaId,
             $dadosPagamento,
             $dataInclusao,
             $dataEntrega,
             $status,
-            $pagamentoStatus,
-        $tipoAssinatura,
-        $assinatura,
+            $tipoAssinatura,
+            $assinatura,
             $responsavelId,
             $notas,
             $arquivoPath,
@@ -1400,7 +1415,7 @@ if ($relativePath === '/documentacoes' && $method === 'POST') {
         'fase' => $fase,
         'subfase' => $subfase,
         'status' => $status,
-        'pagamentoStatus' => $pagamentoStatus,
+        'faturaId' => $faturaId !== null ? (string)$faturaId : null,
         'tipoAssinatura' => $tipoAssinatura,
         'assinatura' => $assinatura,
     ], 201);
@@ -1439,12 +1454,26 @@ if (preg_match('#^/documentacoes/(\\d+)$#', $relativePath, $m) && $method === 'P
         fail_validation('status', 'Status inválido');
     }
 
-    $pagamentoStatus = trim((string)($payload['pagamento_status'] ?? ($payload['pagamentoStatus'] ?? '')));
-    if ($pagamentoStatus === '') {
-        $pagamentoStatus = (string)($existing['pagamento_status'] ?? 'PENDENTE');
-    }
-    if ($pagamentoStatus === '') {
-        $pagamentoStatus = 'PENDENTE';
+    $faturaRawMixed = $payload['fatura'] ?? ($payload['faturaId'] ?? ($payload['fatura_id'] ?? null));
+    $faturaRaw = is_int($faturaRawMixed) ? (string)$faturaRawMixed : optional_string($faturaRawMixed);
+    $faturaId = null;
+    if (is_string($faturaRaw) && $faturaRaw !== '') {
+        if (!ctype_digit($faturaRaw)) {
+            fail_validation('fatura', 'Fatura inválida');
+        }
+        $faturaId = (int)$faturaRaw;
+        if ($faturaId <= 0) {
+            $faturaId = null;
+        }
+        if ($faturaId !== null) {
+            $exists = fetch_one(
+                'SELECT fatura_id FROM uc_faturas WHERE fatura_id = ? AND ' . uc_code_predicate_for_table('uc_faturas', 'code') . ' LIMIT 1',
+                [$faturaId, $code]
+            );
+            if (!$exists) {
+                fail_validation('fatura', 'Fatura não encontrada');
+            }
+        }
     }
 
     $tipoAssinatura = trim((string)($payload['tipo_assinatura'] ?? ($payload['tipoAssinatura'] ?? '')));
@@ -1463,7 +1492,6 @@ if (preg_match('#^/documentacoes/(\\d+)$#', $relativePath, $m) && $method === 'P
         fail_validation('assinatura', 'Assinatura obrigatória');
     }
 
-    $valor = normalize_decimal($payload['valor'] ?? null, 'valor', 2, true);
     $dadosPagamento = optional_string($payload['dados_pagamento'] ?? ($payload['dadosPagamento'] ?? null));
     // `uc_documentacoes.notas` no banco está NOT NULL.
     $notas = optional_string($payload['notas'] ?? '') ?? '';
@@ -1483,18 +1511,17 @@ if (preg_match('#^/documentacoes/(\\d+)$#', $relativePath, $m) && $method === 'P
 
     $pdo = Database::connection();
     try {
-    $stmt = $pdo->prepare('UPDATE uc_documentacoes SET documento = ?, fase = ?, subfase = ?, valor = ?, dados_pagamento = ?, data_inclusao = ?, data_entrega = ?, status = ?, pagamento_status = ?, tipo_assinatura = ?, assinatura = ?, responsavel_id = ?, notas = ?, arquivo_path = ?, updated_at = ? WHERE docs_id = ? AND code = ?');
+        $stmt = $pdo->prepare('UPDATE uc_documentacoes SET documento = ?, fase = ?, subfase = ?, fatura = ?, dados_pagamento = ?, data_inclusao = ?, data_entrega = ?, status = ?, tipo_assinatura = ?, assinatura = ?, responsavel_id = ?, notas = ?, arquivo_path = ?, updated_at = ? WHERE docs_id = ? AND code = ?');
         $stmt->execute([
             $documento,
             $fase,
             $subfase,
-            $valor,
+            $faturaId,
             $dadosPagamento,
             $dataInclusao,
             $dataEntrega,
             $status,
-            $pagamentoStatus,
-        $tipoAssinatura,
+            $tipoAssinatura,
             $assinatura,
             $responsavelId,
             $notas,
@@ -1509,12 +1536,14 @@ if (preg_match('#^/documentacoes/(\\d+)$#', $relativePath, $m) && $method === 'P
     }
 
     $row = fetch_one(
-        'SELECT d.docs_id, d.documento, d.fase, d.subfase, d.valor, d.dados_pagamento, d.data_inclusao, d.data_entrega,
-                d.status, d.pagamento_status, d.tipo_assinatura, d.assinatura, d.responsavel_id, d.notas, d.arquivo_path, d.created_at, d.updated_at,
-                u.nome AS responsavel_nome, ua.nome AS assinatura_nome
+        'SELECT d.docs_id, d.documento, d.fase, d.subfase, d.fatura, d.dados_pagamento, d.data_inclusao, d.data_entrega,
+                d.status, d.tipo_assinatura, d.assinatura, d.responsavel_id, d.notas, d.arquivo_path, d.created_at, d.updated_at,
+                u.nome AS responsavel_nome, ua.nome AS assinatura_nome,
+                ft.descricao AS fatura_descricao
          FROM uc_documentacoes d
          LEFT JOIN uc_users u ON u.user_id = d.responsavel_id
          LEFT JOIN uc_users ua ON ua.user_id = d.assinatura
+         LEFT JOIN uc_faturas ft ON ft.fatura_id = d.fatura
          WHERE d.docs_id = ? AND d.code = ?',
         [$docsId, $code]
     );
@@ -1523,12 +1552,12 @@ if (preg_match('#^/documentacoes/(\\d+)$#', $relativePath, $m) && $method === 'P
         'documento' => $row['documento'] ?? $documento,
         'fase' => $row['fase'] ?? $fase,
         'subfase' => $row['subfase'] ?? $subfase,
-        'valor' => $row['valor'] ?? $valor,
+        'faturaId' => ($row && array_key_exists('fatura', $row) && $row['fatura'] !== null) ? (string)$row['fatura'] : ($faturaId !== null ? (string)$faturaId : null),
+        'faturaDescricao' => ($row && array_key_exists('fatura_descricao', $row) && $row['fatura_descricao'] !== null) ? (string)$row['fatura_descricao'] : null,
         'dadosPagamento' => $row['dados_pagamento'] ?? $dadosPagamento,
         'dataInclusao' => $row['data_inclusao'] ?? $dataInclusao,
         'dataEntrega' => $row['data_entrega'] ?? $dataEntrega,
         'status' => $row['status'] ?? $status,
-        'pagamentoStatus' => $row['pagamento_status'] ?? $pagamentoStatus,
         'tipoAssinatura' => $row['tipo_assinatura'] ?? $tipoAssinatura,
         'assinatura' => $row['assinatura'] ?? $assinatura,
         'assinaturaNome' => $row['assinatura_nome'] ?? null,

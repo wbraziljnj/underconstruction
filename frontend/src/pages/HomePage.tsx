@@ -51,9 +51,9 @@ type FaturaResumo = {
 type DocumentoResumo = {
   docsId: number;
   documento: string;
-  pagamentoStatus?: string;
   status?: string;
-  valor?: string;
+  faturaId?: string | null;
+  faturaDescricao?: string | null;
   responsavelNome?: string | null;
 };
 
@@ -184,9 +184,9 @@ export default function HomePage() {
       const docsResumo: DocumentoResumo[] = (dRes.items || []).map((d: any) => ({
         docsId: Number(d.docsId || d.docs_id || 0),
         documento: d.documento || '',
-        pagamentoStatus: d.pagamentoStatus || d.pagamento_status || '',
         status: d.status || '',
-        valor: d.valor ?? '',
+        faturaId: d.faturaId ?? d.fatura ?? null,
+        faturaDescricao: d.faturaDescricao ?? d.fatura_descricao ?? null,
         fase: d.fase || '',
         subfase: d.subfase || '',
         responsavelNome: d.responsavelNome ?? d.responsavel_nome ?? null,
@@ -574,11 +574,6 @@ export default function HomePage() {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
                         <div style={{ fontWeight: 700 }}>{d.documento}</div>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                          {d.pagamentoStatus ? (
-                            <span style={{ fontSize: 11, padding: '4px 8px', borderRadius: 999, background: 'rgba(255,193,7,0.14)', border: '1px solid rgba(255,193,7,0.28)', color: paymentColor((d.pagamentoStatus || '').toUpperCase()) }}>
-                              Pagamento: {d.pagamentoStatus}
-                            </span>
-                          ) : null}
                           {d.status ? (
                             <span style={{ fontSize: 11, padding: '4px 8px', borderRadius: 999, background: statusStyle(d.status).bg, border: `1px solid ${statusStyle(d.status).bd}`, color: statusStyle(d.status).fg }}>
                               {statusStyle(d.status).label}
@@ -588,7 +583,11 @@ export default function HomePage() {
                       </div>
                       <div style={{ fontSize: 12, opacity: 0.85, marginTop: 4 }}>{d.subfase || d.fase || '—'}</div>
                       <div style={{ fontSize: 12, opacity: 0.8, marginTop: 6, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                        <span>Valor: <b>{formatCurrency(d.valor)}</b></span>
+                        {d.faturaDescricao || d.faturaId ? (
+                          <span>
+                            Fatura: <b>{d.faturaDescricao || `#${d.faturaId}`}</b>
+                          </span>
+                        ) : null}
                         {d.dataInclusao ? <span>Inclusão: <b>{formatBrDate(d.dataInclusao)}</b></span> : null}
                         {d.dataEntrega ? <span>Entrega: <b>{formatBrDate(d.dataEntrega)}</b></span> : null}
                       </div>
