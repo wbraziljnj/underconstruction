@@ -6,6 +6,22 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { apiFetch } from '../api/client';
 import { useAuth } from '../auth/auth';
 
+const DEFAULT_AVATAR_MALE_SVG = `data:image/svg+xml;utf8,${encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff4d6d"/>
+      <stop offset="1" stop-color="#ff7aa2"/>
+    </linearGradient>
+  </defs>
+  <rect width="160" height="160" rx="80" fill="url(#bg)"/>
+  <circle cx="80" cy="62" r="28" fill="#ffd7b3"/>
+  <path d="M52 65c3-18 18-30 28-30s25 12 28 30c-7-4-14-8-28-8s-21 4-28 8z" fill="#2f2f3a"/>
+  <path d="M36 150c6-30 22-46 44-46s38 16 44 46" fill="#f2c14e"/>
+  <path d="M56 104c6 10 14 15 24 15s18-5 24-15" fill="none" stroke="#ffffff" stroke-width="10" stroke-linecap="round" opacity="0.9"/>
+</svg>
+`.trim())}`;
+
 function maskCpfCnpj(value: string) {
   const digits = value.replace(/\D/g, '');
   if (digits.length <= 11) {
@@ -80,6 +96,17 @@ function PencilIcon({ title = 'Editar' }: { title?: string }) {
 function apiBaseUrl() {
   const baseUrl = (import.meta as any).env?.BASE_URL ?? '/';
   return `${String(baseUrl).replace(/\/?$/, '/')}`;
+}
+
+function resolveUserPhotoSrc(foto?: string | null) {
+  const raw = (foto ?? '').trim();
+  if (!raw) return DEFAULT_AVATAR_MALE_SVG;
+  if (/^data:/i.test(raw)) return raw;
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (raw.startsWith('/')) return raw;
+  let rel = raw.replace(/^\/+/, '');
+  if (!rel.includes('/')) rel = `uploads/${rel}`;
+  return `${apiBaseUrl()}api/${rel}`;
 }
 
 async function uploadFoto(file: File): Promise<UploadResponse> {
@@ -247,87 +274,101 @@ export default function CadastrosPage() {
         </button>
       </div>
 
-      <div style={{ marginTop: 12, overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-          <thead>
-            <tr style={{ textAlign: 'left', opacity: 0.8 }}>
-              <th style={{ padding: 10 }}>Nome</th>
-              <th style={{ padding: 10 }}>Tipo</th>
-              <th style={{ padding: 10 }}>CPF/CNPJ</th>
-              <th style={{ padding: 10 }}>Telefone</th>
-              <th style={{ padding: 10 }}>Email</th>
-              <th style={{ padding: 10 }}>Status</th>
-              <th style={{ padding: 10 }}>Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {listError ? (
-              <tr>
-                <td colSpan={7} style={{ padding: 12, color: 'var(--danger)' }}>
-                  {listError}
-                </td>
-              </tr>
-            ) : loading ? (
-              <tr>
-                <td colSpan={7} style={{ padding: 12, opacity: 0.7 }}>
-                  Carregando...
-                </td>
-              </tr>
-            ) : rows.length === 0 ? (
-              <tr>
-                <td colSpan={7} style={{ padding: 12, opacity: 0.7 }}>
-                  Nenhum usuário encontrado.
-                </td>
-              </tr>
-            ) : (
-              rows.map((r) => (
-                <tr key={r.userId} style={{ borderTop: '1px solid var(--border)' }}>
-                  <td style={{ padding: 10 }}>{r.nome}</td>
-                  <td style={{ padding: 10 }}>{r.tipoUsuario}</td>
-                  <td style={{ padding: 10 }}>{maskCpfCnpj(r.cpfCnpj || '')}</td>
-                  <td style={{ padding: 10 }}>{maskPhone(r.telefone || '')}</td>
-                  <td style={{ padding: 10 }}>{r.email}</td>
-                  <td style={{ padding: 10 }}>{r.status}</td>
-                  <td style={{ padding: 10 }}>
-                    <button
-                      className="btn"
-                      type="button"
-                      title="Editar"
-                      disabled={
-                        !canWrite ||
-                        (String(r.tipoUsuario || '') === 'Owner' && String(user?.userId || '') !== String(r.userId || ''))
-                      }
-                      onClick={() => {
-                        setMode('edit');
-                        setEditingRow(r);
-                        setSelectedPhotoFile(null);
-                        setLinkedPrincipal(null);
-                        form.reset({
-                          id_principal: r.idPrincipal || '',
-                          foto: r.foto || '',
-                          tipo_usuario: r.tipoUsuario,
-                          nome: r.nome,
-                          cpf_cnpj: r.cpfCnpj,
-                          telefone: r.telefone,
-                          endereco: r.endereco,
-                          email: r.email,
-                          notas: r.notas || '',
-                          status: r.status,
-                          reset_senha: false
-                        });
-                        setOpen(true);
-                      }}
-                      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                    >
-                      <PencilIcon />
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      <style>{`
+        .uc-users-grid{ margin-top:12px; display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:12px; }
+        @media (max-width: 980px){ .uc-users-grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        @media (max-width: 680px){ .uc-users-grid{ grid-template-columns: 1fr; } }
+        .uc-user-card{ padding:14px; display:grid; gap:12px; }
+        .uc-user-avatar{ width:110px; height:110px; border-radius:999px; object-fit:cover; border:1px solid var(--border); box-shadow: 0 8px 22px rgba(0,0,0,0.18); margin: 4px auto 0; background: rgba(255,255,255,0.04); }
+        .uc-user-name{ font-weight:900; font-size:18px; text-align:center; letter-spacing:0.1px; }
+        .uc-user-field{ display:grid; grid-template-columns: 130px 1fr; gap:8px; font-size:13px; }
+        .uc-user-field b{ font-weight:800; }
+        .uc-user-meta{ display:flex; justify-content:space-between; gap:10px; font-size:12px; opacity:0.75; }
+      `}</style>
+
+      {listError ? (
+        <div style={{ marginTop: 12, color: 'var(--danger)', fontSize: 13 }}>{listError}</div>
+      ) : loading ? (
+        <div style={{ marginTop: 12, opacity: 0.7, fontSize: 13 }}>Carregando...</div>
+      ) : rows.length === 0 ? (
+        <div style={{ marginTop: 12, opacity: 0.7, fontSize: 13 }}>Nenhum usuário encontrado.</div>
+      ) : (
+        <div className="uc-users-grid">
+          {rows.map((r) => {
+            const canEdit =
+              canWrite &&
+              !(String(r.tipoUsuario || '') === 'Owner' && String(user?.userId || '') !== String(r.userId || ''));
+            return (
+              <div key={r.userId} className="card uc-user-card">
+                <img className="uc-user-avatar" src={resolveUserPhotoSrc(r.foto)} alt={r.nome ? `Foto de ${r.nome}` : 'Foto do usuário'} />
+
+                <div className="uc-user-name">{r.nome || '—'}</div>
+
+                <div style={{ display: 'grid', gap: 8 }}>
+                  <div className="uc-user-field">
+                    <b>Tipo:</b> <span>{r.tipoUsuario || '—'}</span>
+                  </div>
+                  <div className="uc-user-field">
+                    <b>CPF/CNPJ:</b> <span>{r.cpfCnpj ? maskCpfCnpj(String(r.cpfCnpj)) : '—'}</span>
+                  </div>
+                  <div className="uc-user-field">
+                    <b>Telefone:</b> <span>{r.telefone ? maskPhone(String(r.telefone)) : '—'}</span>
+                  </div>
+                  <div className="uc-user-field">
+                    <b>Endereço:</b> <span style={{ wordBreak: 'break-word' }}>{r.endereco || '—'}</span>
+                  </div>
+                  <div className="uc-user-field">
+                    <b>Email:</b> <span style={{ wordBreak: 'break-word' }}>{r.email || '—'}</span>
+                  </div>
+                  <div className="uc-user-field">
+                    <b>Status:</b> <span>{r.status || '—'}</span>
+                  </div>
+                  <div className="uc-user-field">
+                    <b>Notas:</b> <span style={{ wordBreak: 'break-word' }}>{r.notas || '—'}</span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                  <button
+                    className="btn"
+                    type="button"
+                    disabled={!canEdit}
+                    onClick={() => {
+                      setMode('edit');
+                      setEditingRow(r);
+                      setSelectedPhotoFile(null);
+                      setLinkedPrincipal(null);
+                      form.reset({
+                        id_principal: r.idPrincipal || '',
+                        foto: r.foto || '',
+                        tipo_usuario: r.tipoUsuario,
+                        nome: r.nome,
+                        cpf_cnpj: r.cpfCnpj,
+                        telefone: r.telefone,
+                        endereco: r.endereco,
+                        email: r.email,
+                        notas: r.notas || '',
+                        status: r.status,
+                        reset_senha: false
+                      });
+                      setOpen(true);
+                    }}
+                  >
+                    Editar
+                  </button>
+                </div>
+
+                <div className="uc-user-meta">
+                  <span>#{String(r.userId || '—')}</span>
+                  <span style={{ textTransform: 'lowercase' }}>
+                    {r.createdAt ? `criado: ${String(r.createdAt).slice(0, 10)}` : 'criado: —'}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <Modal
         open={open}
