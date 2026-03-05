@@ -330,7 +330,7 @@ export default function CadastrosPage() {
 
                 <div style={{ display: 'grid', gap: 8 }}>
                   <div className="uc-user-field">
-                    <b>Tipo:</b> <span>{r.tipoUsuario || '—'}</span>
+                    <b>Função:</b> <span>{r.tipoUsuario || '—'}</span>
                   </div>
                   <div className="uc-user-field">
                     <b>CPF/CNPJ:</b> <span>{r.cpfCnpj ? maskCpfCnpj(String(r.cpfCnpj)) : '—'}</span>
