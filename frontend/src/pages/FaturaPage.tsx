@@ -194,7 +194,7 @@ export default function FaturaPage() {
 
   const valor = form.watch('valor');
   const quantidade = form.watch('quantidade');
-  const cellPad = { padding: '12px 10px' } as const;
+  const cellPad = { padding: '20px 10px' } as const;
 
   function openEditModal(row: any) {
     setMode('edit');

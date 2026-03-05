@@ -276,7 +276,7 @@ export default function FasesPage() {
   });
 
   const selectedFase = form.watch('fase');
-  const cellPad = { padding: '12px 10px' } as const;
+  const cellPad = { padding: '20px 10px' } as const;
 
   function openEditModal(row: any) {
     setMode('edit');

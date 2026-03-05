@@ -329,7 +329,7 @@ export default function DocumentacoesPage() {
     () => [...users].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')),
     [users]
   );
-  const cellPad = { padding: '12px 10px' } as const;
+  const cellPad = { padding: '20px 10px' } as const;
 
   useEffect(() => {
     if (!open) return;
