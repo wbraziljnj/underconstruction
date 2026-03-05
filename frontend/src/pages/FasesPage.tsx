@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { apiFetch } from '../api/client';
 import { useAuth } from '../auth/auth';
+import { getPhaseIcon } from '../ui/phaseIcons';
 
 const PHASES: { fase: string; subfases: string[] }[] = [
   {
@@ -239,6 +240,8 @@ export default function FasesPage() {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<'create' | 'edit'>('create');
   const [editingRow, setEditingRow] = useState<any | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsRow, setDetailsRow] = useState<any | null>(null);
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
@@ -404,7 +407,14 @@ export default function FasesPage() {
               </tr>
             ) : (
               rows.map((r) => (
-                <tr key={r.faseId} style={{ borderTop: '1px solid var(--border)' }}>
+                <tr
+                  key={r.faseId}
+                  style={{ borderTop: '1px solid var(--border)', cursor: 'pointer' }}
+                  onClick={() => {
+                    setDetailsRow(r);
+                    setDetailsOpen(true);
+                  }}
+                >
                   <td style={{ padding: 10 }}>{r.fase}</td>
                   <td style={{ padding: 10, opacity: 0.8 }}>{r.subfase || '-'}</td>
                   <td style={{ padding: 10 }}>{formatBrDate(r.dataInicio)}</td>
@@ -419,7 +429,8 @@ export default function FasesPage() {
                       type="button"
                       title="Editar"
                       disabled={!canWrite}
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setMode('edit');
                         setEditingRow(r);
                         const subs = getSubfasesByFase(r.fase || '');
@@ -448,6 +459,76 @@ export default function FasesPage() {
           </tbody>
         </table>
       </div>
+
+      <Modal
+        open={detailsOpen}
+        title="Detalhes da fase"
+        onClose={() => setDetailsOpen(false)}
+        footer={null}
+      >
+        {detailsRow ? (
+          <>
+            <style>{`
+              .uc-fase-card{ padding:14px; display:grid; gap:12px; max-width: 680px; margin: 0 auto; width:100%; }
+              .uc-fase-avatar{ width:120px; height:120px; border-radius:999px; border:1px solid var(--border); display:flex; align-items:center; justify-content:center; font-size:44px; margin: 4px auto 0; background: rgba(255,255,255,0.04); box-shadow: 0 8px 22px rgba(0,0,0,0.18); }
+              .uc-fase-title{ font-weight:900; font-size:18px; text-align:center; letter-spacing:0.1px; }
+              .uc-fase-sub{ text-align:center; opacity:0.75; font-size:12px; margin-top:-6px; }
+              .uc-fase-field{ display:grid; grid-template-columns: 120px 1fr; gap:6px; font-size:13px; align-items:baseline; }
+              .uc-fase-field b{ font-weight:800; text-align:right; }
+              .uc-fase-scroll{ max-height: 78vh; overflow:auto; padding-right: 2px; }
+            `}</style>
+
+            <div className="uc-fase-scroll">
+              <div className="card uc-fase-card">
+                <div className="uc-fase-avatar" title={detailsRow.fase || ''}>
+                  {getPhaseIcon(String(detailsRow.fase || ''))}
+                </div>
+                <div className="uc-fase-title">{detailsRow.fase || '—'}</div>
+                <div className="uc-fase-sub">{detailsRow.subfase || '—'}</div>
+
+                <div style={{ display: 'grid', gap: 8 }}>
+                  <div className="uc-fase-field">
+                    <b>ID:</b> <span>{String(detailsRow.faseId ?? '—')}</span>
+                  </div>
+                  <div className="uc-fase-field">
+                    <b>Status:</b>{' '}
+                    <span style={{ color: statusColor(detailsRow.status), fontWeight: 800 }}>{detailsRow.status || '—'}</span>
+                  </div>
+                  <div className="uc-fase-field">
+                    <b>Início:</b> <span>{detailsRow.dataInicio ? formatBrDate(detailsRow.dataInicio) : '—'}</span>
+                  </div>
+                  <div className="uc-fase-field">
+                    <b>Previsão:</b> <span>{detailsRow.previsaoFinalizacao ? formatBrDate(detailsRow.previsaoFinalizacao) : '—'}</span>
+                  </div>
+                  <div className="uc-fase-field">
+                    <b>Finalização:</b> <span>{detailsRow.dataFinalizacao ? formatBrDate(detailsRow.dataFinalizacao) : '—'}</span>
+                  </div>
+                  <div className="uc-fase-field">
+                    <b>Responsável:</b> <span>{detailsRow.responsavelNome || '—'}</span>
+                  </div>
+                  <div className="uc-fase-field">
+                    <b>Previsão R$:</b> <span>{detailsRow.valorPrevisao ?? '—'}</span>
+                  </div>
+                  <div className="uc-fase-field">
+                    <b>Atual R$:</b> <span>{detailsRow.valorAtual ?? '—'}</span>
+                  </div>
+                  <div className="uc-fase-field">
+                    <b>Notas:</b> <span style={{ wordBreak: 'break-word' }}>{detailsRow.notas || '—'}</span>
+                  </div>
+                  <div className="uc-fase-field">
+                    <b>created_at:</b> <span>{detailsRow.createdAt || '—'}</span>
+                  </div>
+                  <div className="uc-fase-field">
+                    <b>updated_at:</b> <span>{detailsRow.updatedAt || '—'}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div style={{ opacity: 0.7, fontSize: 13 }}>Nenhuma fase selecionada.</div>
+        )}
+      </Modal>
 
       <Modal
         open={open}
